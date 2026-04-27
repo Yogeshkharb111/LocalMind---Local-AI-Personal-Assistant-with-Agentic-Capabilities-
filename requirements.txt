@@ -1,0 +1,62 @@
+# Core AI — Ollama (runs locally via OpenAI-compatible API)
+# No pip package needed — Ollama runs as a separate process
+# Install Ollama from: https://ollama.com
+# Then run: ollama pull kimi-k2.5:cloud
+# httpx (already below) handles all API calls to Ollama
+
+# Telegram Bot (bot API)
+python-telegram-bot>=21.0
+
+# Telethon (personal account — for session generator script)
+telethon>=1.36.0
+
+# MCP SDK
+mcp>=1.0.0
+
+# RAG
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+numpy>=1.26.0
+
+# Utils
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+aiohttp>=3.9.0
+aiofiles>=23.2.0
+loguru>=0.7.0
+PyYAML>=6.0
+rich>=13.0.0
+httpx>=0.27.0
+tenacity>=8.2.0
+apscheduler>=3.10.0
+
+
+# MEETING ASSISTANT
+openai-whisper>=20231117
+simple_diarizer>=0.1.0
+sounddevice>=0.4.6
+soundfile>=0.12.1
+pytz>=2024.1
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# ──────────────────────────────────────────────────────────────
+# MCP SERVERS — installed separately (run as subprocesses)
+# ──────────────────────────────────────────────────────────────
+# First install uv:  pip install uv
+#
+# 1. Telegram MCP:   pip install telegram-mcp
+#                    Source: github.com/chigwell/telegram-mcp
+#
+# 2. GitHub MCP:     uvx github-mcp-server
+#                    Source: github.com/github/github-mcp-server
+#
+# 3. Filesystem MCP: npx @modelcontextprotocol/server-filesystem
+#                    Requires Node.js: nodejs.org
+#                    Source: github.com/modelcontextprotocol/servers
+#
+# 4. Windows MCP:    uvx windows-mcp  (Windows only)
+#                    Source: github.com/CursorTouch/Windows-MCP
+#
+# 5. LinkedIn MCP:   uvx linkedin-mcp-server
+#                    Source: github.com/stickerdaniel/linkedin-mcp-server

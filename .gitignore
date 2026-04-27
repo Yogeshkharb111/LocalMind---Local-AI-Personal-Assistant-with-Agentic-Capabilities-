@@ -1,0 +1,25 @@
+# Secrets
+.env
+*.session
+
+# Data (contains personal info + large files)
+data/chroma_db/
+data/memory/history_*.jsonl
+data/logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
