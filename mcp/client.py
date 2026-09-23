@@ -10,7 +10,8 @@ import os
 import queue
 import subprocess
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from loguru import logger
 
 
@@ -20,16 +21,16 @@ class MCPClient:
     Uses a background thread to read stdout, avoiding Windows asyncio subprocess bugs.
     """
 
-    def __init__(self, name: str, command: List[str], env: Optional[Dict[str, str]] = None):
+    def __init__(self, name: str, command: list[str], env: dict[str, str] | None = None):
         self.name = name
         self.command = command
         self.env = env or {}
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
         self._request_id = 0
-        self.tools: List[dict] = []
+        self.tools: list[dict] = []
         self.connected = False
         self._read_queue: queue.Queue = queue.Queue()
-        self._reader_thread: Optional[threading.Thread] = None
+        self._reader_thread: threading.Thread | None = None
         self._write_lock = threading.Lock()
 
     def _reader_loop(self):
@@ -67,7 +68,7 @@ class MCPClient:
             self._process.stdin.write(line.encode())
             self._process.stdin.flush()
 
-    async def _send_request(self, method: str, params: dict, timeout: float = 30.0) -> Optional[dict]:
+    async def _send_request(self, method: str, params: dict, timeout: float = 30.0) -> dict | None:
         """Send JSON-RPC request, wait for matching response using thread queue."""
         self._request_id += 1
         req_id = self._request_id
@@ -88,12 +89,15 @@ class MCPClient:
             try:
                 # Use executor to do blocking queue.get without blocking event loop
                 response = await asyncio.wait_for(
-                    loop.run_in_executor(None, lambda: self._read_queue.get(timeout=min(1.0, remaining))),
-                    timeout=min(2.0, remaining + 0.5)
+                    loop.run_in_executor(
+                        None,
+                        lambda r=remaining: self._read_queue.get(timeout=min(1.0, r)),
+                    ),
+                    timeout=min(2.0, remaining + 0.5),
                 )
-            except (queue.Empty, asyncio.TimeoutError):
+            except (TimeoutError, queue.Empty):
                 if loop.time() >= deadline:
-                    raise asyncio.TimeoutError(f"Timeout waiting for response to {method}")
+                    raise TimeoutError(f"Timeout waiting for response to {method}") from None
                 continue
 
             if response is None:
@@ -106,7 +110,7 @@ class MCPClient:
                     return None
                 return response.get("result")
 
-        raise asyncio.TimeoutError(f"No response matched id={req_id} for {method}")
+        raise TimeoutError(f"No response matched id={req_id} for {method}")
 
     async def _send_notification(self, method: str, params: dict = None):
         """Send a JSON-RPC notification (no response expected)."""
@@ -169,14 +173,14 @@ class MCPClient:
         except FileNotFoundError:
             logger.warning(f"MCP [{self.name}]: command not found: {self.command[0]}")
             return False
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"MCP [{self.name}]: connection timed out")
             return False
         except Exception as e:
             logger.warning(f"MCP [{self.name}]: failed to start: {e}")
             return False
 
-    async def list_tools(self) -> List[dict]:
+    async def list_tools(self) -> list[dict]:
         """Fetch all tools via tools/list."""
         if not self.connected:
             return []
@@ -204,7 +208,7 @@ class MCPClient:
             logger.error(f"MCP [{self.name}]: tools/list failed: {e}")
             return []
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Execute a tool via tools/call."""
         if not self.connected:
             return f"Error: MCP server '{self.name}' is not connected."
@@ -236,7 +240,7 @@ class MCPClient:
 
             return json.dumps(result, indent=2)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return f"Error: Tool '{tool_name}' timed out after 60s"
         except Exception as e:
             logger.error(f"MCP [{self.name}]: tools/call '{tool_name}' failed: {e}")

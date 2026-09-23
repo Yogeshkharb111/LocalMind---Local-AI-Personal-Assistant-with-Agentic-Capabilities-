@@ -11,9 +11,8 @@ Manages all memory layers:
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
-from loguru import logger
 
+from loguru import logger
 
 DEFAULT_SOUL = """You are LocalMind — an intelligent, helpful, and personable AI assistant.
 You have access to tools that can interact with GitHub, Telegram, Windows OS, the filesystem, and LinkedIn.
@@ -43,11 +42,11 @@ class MemoryStore:
         self.memory_dir.mkdir(parents=True, exist_ok=True)
 
         # In-memory conversation histories: {user_id: [{"role": ..., "content": ...}]}
-        self._histories: Dict[int, List[dict]] = {}
+        self._histories: dict[int, list[dict]] = {}
 
         # Cache for file-based memory
-        self._soul: Optional[str] = None
-        self._tools_context: Optional[str] = None
+        self._soul: str | None = None
+        self._tools_context: str | None = None
 
     async def initialize(self):
         """Create default memory files if they don't exist."""
@@ -115,7 +114,7 @@ class MemoryStore:
 
         lines = [
             f"**SOUL.md**: {len(soul)} chars",
-            f"**TOOLS.md**: loaded",
+            "**TOOLS.md**: loaded",
             f"**USER.md**: {'loaded' if user_prefs else 'not set'}",
             f"**MEMORY.md**: {'loaded (' + str(len(facts.splitlines())) + ' facts)' if facts else 'empty'}",
             f"**Conversation history**: {history_len} messages",
@@ -123,7 +122,7 @@ class MemoryStore:
         return "\n".join(lines)
 
     # ── Conversation History ──────────────────────────────
-    async def get_history(self, user_id: int, max_turns: int = 20) -> List[dict]:
+    async def get_history(self, user_id: int, max_turns: int = 20) -> list[dict]:
         """Return the last max_turns messages for a user."""
         history = self._histories.get(user_id, [])
         return history[-max_turns:]
@@ -152,7 +151,7 @@ class MemoryStore:
         logger.info(f"Cleared history for user {user_id}")
 
     # ── Persistence ───────────────────────────────────────
-    async def _load_history(self, user_id: int) -> List[dict]:
+    async def _load_history(self, user_id: int) -> list[dict]:
         """Load persisted conversation history from JSONL file."""
         hist_path = self.memory_dir / f"history_{user_id}.jsonl"
         if not hist_path.exists():

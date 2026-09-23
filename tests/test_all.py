@@ -1,17 +1,18 @@
 """
 LocalMind Test Suite
 Tests for all major components:
-  - Intent classifier
   - Memory store
   - RAG retriever
   - Skill executor
   - MCP coordinator
   - Full pipeline integration
+
+Runnable both with pytest (`pytest`) and directly (`python tests/test_all.py`).
 """
 
 import asyncio
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -24,50 +25,11 @@ os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test_token")
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.new_event_loop().run_until_complete(coro)
 
 
 # ══════════════════════════════════════════════════════════════
-# Test 1: Intent Classifier
-# ══════════════════════════════════════════════════════════════
-def test_intent_classifier():
-    print("\n🧪 Testing Intent Classifier...")
-    from engine.intent_classifier import IntentClassifier, Intent
-
-    clf = IntentClassifier(mode="rule")
-    clf.update_skill_triggers({
-        "summarize": [r"\bsummariz(e|ation)\b"],
-        "scan_bugs": [r"\bscan\s+(for\s+)?bugs?\b"],
-    })
-
-    cases = [
-        ("Good morning!", Intent.CHAT),
-        ("thanks!", Intent.CHAT),
-        ("lol", Intent.CHAT),
-        ("what did we decide last week?", Intent.QUERY),
-        ("do you remember what I said about the API?", Intent.QUERY),
-        ("create a GitHub issue for login bug", Intent.ACTION),
-        ("send a message to John on Telegram", Intent.ACTION),
-        ("remind me at 5pm", Intent.ACTION),
-        ("summarize this conversation", Intent.SKILL),
-        ("scan for bugs in main.py", Intent.SKILL),
-    ]
-
-    passed = 0
-    for msg, expected in cases:
-        intent, skill = clf.classify(msg)
-        status = "✅" if intent == expected else "❌"
-        print(f"  {status} '{msg[:40]}' → {intent.value} (expected: {expected.value})")
-        if intent == expected:
-            passed += 1
-
-    print(f"  Result: {passed}/{len(cases)} passed")
-    assert passed >= len(cases) * 0.8, f"Too many failures: {passed}/{len(cases)}"
-    return passed, len(cases)
-
-
-# ══════════════════════════════════════════════════════════════
-# Test 2: Memory Store
+# Test 1: Memory Store
 # ══════════════════════════════════════════════════════════════
 def test_memory_store():
     print("\n🧪 Testing Memory Store...")
@@ -108,7 +70,7 @@ def test_memory_store():
         assert len(hist) == 0
         print("  ✅ History cleared")
 
-    return True
+    return
 
 
 # ══════════════════════════════════════════════════════════════
@@ -118,11 +80,11 @@ def test_rag_retriever():
     print("\n🧪 Testing RAG Retriever...")
 
     try:
-        import chromadb
-        from sentence_transformers import SentenceTransformer
+        import chromadb  # noqa: F401
+        from sentence_transformers import SentenceTransformer  # noqa: F401
     except ImportError:
         print("  ⚠️ chromadb/sentence-transformers not installed, skipping RAG test")
-        return True
+        return
 
     from rag.retriever import RAGRetriever
 
@@ -169,7 +131,7 @@ def test_rag_retriever():
         stats = run(rag.get_stats())
         print(f"  ✅ Stats: {stats}")
 
-    return True
+    return
 
 
 # ══════════════════════════════════════════════════════════════
@@ -199,9 +161,9 @@ def test_skill_executor():
         assert skill is not None
         prompt = skill.build_prompt("This is a test message")
         assert "test message" in prompt
-        print(f"  ✅ Skill prompt template renders correctly")
+        print("  ✅ Skill prompt template renders correctly")
 
-    return True
+    return
 
 
 # ══════════════════════════════════════════════════════════════
@@ -228,7 +190,7 @@ def test_mcp_coordinator():
     # "filesystem__read_file", not "fs_read_file".
     if "filesystem__read_file" not in tool_names:
         print("  ⚠️ filesystem MCP server not connected (Node.js/npx missing?) — skipping tool call test")
-        return True
+        return
 
     import tempfile
     home_dir = os.path.expanduser("~")
@@ -243,7 +205,7 @@ def test_mcp_coordinator():
     print(f"  ✅ Filesystem tool works: read {len(result)} chars")
 
     os.unlink(test_file)
-    return True
+    return
 
 
 # ══════════════════════════════════════════════════════════════
@@ -253,22 +215,25 @@ def test_architecture():
     print("\n🧪 Testing Architecture Imports...")
     modules = [
         "config.settings",
-        "engine.intent_classifier",
         "engine.router",
         "memory_store.memory",
         "rag.retriever",
         "mcp.coordinator",
         "skills.executor",
+        "skills.tool_registry",
         "telegram_handler.handler",
     ]
+    failures = []
     for mod in modules:
         try:
             __import__(mod)
             print(f"  ✅ {mod}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - test wants the message
             print(f"  ❌ {mod}: {e}")
+            failures.append(f"{mod}: {e}")
 
-    return True
+    assert not failures, f"Import failures: {failures}"
+    return
 
 
 # ══════════════════════════════════════════════════════════════
@@ -286,12 +251,6 @@ if __name__ == "__main__":
         results["architecture"] = "PASS"
     except Exception as e:
         results["architecture"] = f"FAIL: {e}"
-
-    try:
-        test_intent_classifier()
-        results["intent_classifier"] = "PASS"
-    except Exception as e:
-        results["intent_classifier"] = f"FAIL: {e}"
 
     try:
         test_memory_store()

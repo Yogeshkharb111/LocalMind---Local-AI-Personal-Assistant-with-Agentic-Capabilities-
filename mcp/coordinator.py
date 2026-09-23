@@ -103,14 +103,15 @@ import platform
 import re
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 from loguru import logger
 
-from mcp.client import MCPClient
 from config.settings import settings
+from mcp.client import MCPClient
 
 
-def _build_telegram_command() -> List[str]:
+def _build_telegram_command() -> list[str]:
     """
     Build the correct command to launch chigwell/telegram-mcp.
 
@@ -141,7 +142,7 @@ def _build_telegram_command() -> List[str]:
     return cmd
 
 
-def _npx_command() -> List[str]:
+def _npx_command() -> list[str]:
     """
     Return the platform-appropriate `npx` invocation.
 
@@ -154,7 +155,7 @@ def _npx_command() -> List[str]:
     return [shutil.which("npx") or "npx"]
 
 
-def _allowed_fs_roots() -> List[str]:
+def _allowed_fs_roots() -> list[str]:
     """Directories the filesystem MCP server is allowed to touch."""
     home_dir = os.path.expanduser("~")
     roots = [home_dir]
@@ -164,7 +165,7 @@ def _allowed_fs_roots() -> List[str]:
     return roots
 
 
-def _build_filesystem_command() -> List[str]:
+def _build_filesystem_command() -> list[str]:
     """
     Build a cross-platform launch command for the filesystem MCP server.
 
@@ -187,7 +188,7 @@ def _build_filesystem_command() -> List[str]:
     return [*_npx_command(), "-y", "@modelcontextprotocol/server-filesystem", *roots]
 
 
-def _server_definitions() -> List[dict]:
+def _server_definitions() -> list[dict]:
     """
     Build the list of all MCP server definitions.
     Each entry describes how to spawn one server as a subprocess.
@@ -382,10 +383,10 @@ class MCPCoordinator:
     """
 
     def __init__(self):
-        self._clients: Dict[str, MCPClient] = {}
+        self._clients: dict[str, MCPClient] = {}
         # namespaced_name → (client, original_mcp_tool_name)
-        self._tool_registry: Dict[str, Tuple[MCPClient, str]] = {}
-        self._all_tools: List[dict] = []   # Anthropic-format tool defs
+        self._tool_registry: dict[str, tuple[MCPClient, str]] = {}
+        self._all_tools: list[dict] = []   # Anthropic-format tool defs
         self._server_defs = _server_definitions()
 
     async def initialize(self):
@@ -489,15 +490,15 @@ class MCPCoordinator:
 
     # ── Public Interface ──────────────────────────────────────────────────────
 
-    async def get_tools(self) -> List[dict]:
+    async def get_tools(self) -> list[dict]:
         """Return all Anthropic-format tool definitions for connected servers."""
         return self._all_tools
 
-    async def get_tool_names(self) -> List[str]:
+    async def get_tool_names(self) -> list[str]:
         """Return all namespaced tool names."""
         return list(self._tool_registry.keys())
 
-    async def execute_tool(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
+    async def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """
         Execute a tool by its namespaced name via JSON-RPC tools/call.
 
@@ -527,7 +528,7 @@ class MCPCoordinator:
         logger.debug(f"🔧 [{client.name}] ← {str(result)[:120]}")
         return result
 
-    async def get_status(self) -> Dict[str, dict]:
+    async def get_status(self) -> dict[str, dict]:
         """
         Return status of ALL servers (connected + disabled).
         Used by /status command in Telegram.
@@ -555,7 +556,7 @@ class MCPCoordinator:
 
         return status
 
-    async def get_tools_by_server(self, server_name: str) -> List[str]:
+    async def get_tools_by_server(self, server_name: str) -> list[str]:
         """Return tool names for a specific server (for skill routing)."""
         client = self._clients.get(server_name)
         if not client or not client.connected:

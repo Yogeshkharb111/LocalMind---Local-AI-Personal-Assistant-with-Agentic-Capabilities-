@@ -7,7 +7,7 @@ A single component test suite that verifies imports and each subsystem in isolat
 | File | Responsibility |
 |------|----------------|
 | `__init__.py` | Marks the package. |
-| `test_all.py` | Tests: architecture imports, intent classifier, memory store, RAG retriever, skill executor, MCP coordinator. |
+| `test_all.py` | Tests: architecture imports, memory store, RAG retriever, skill executor, MCP coordinator. |
 
 ## Flow
 
@@ -18,7 +18,6 @@ flowchart LR
     T --> R["RAG retriever"]
     T --> S["skill executor"]
     T --> C["MCP coordinator"]
-    T --> I["intent classifier"]
 ```
 
 ## Example

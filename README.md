@@ -1,5 +1,7 @@
 # 🤖 LocalMind — Local AI Personal Assistant with Agentic Capabilities
 
+[![CI](https://github.com/Yogeshkharb111/LocalMind---Local-AI-Personal-Assistant-with-Agentic-Capabilities-/actions/workflows/ci.yml/badge.svg)](https://github.com/Yogeshkharb111/LocalMind---Local-AI-Personal-Assistant-with-Agentic-Capabilities-/actions/workflows/ci.yml)
+
 A fully self-hostable AI personal assistant accessible via **Telegram**, powered by any **OpenAI-compatible LLM backend** — use **OpenRouter** (cloud, many models) or a **local Ollama** server — with deep tool integration via **MCP (Model Context Protocol)**. Run it fully local so your data never leaves your machine, or point it at OpenRouter for access to frontier models.
 
 LocalMind is built around an **LLM-first, agentic architecture**. There are no hand-written routing rules deciding what to do — every message flows through a **Plan → Execute → Respond** loop, and the model itself decides which memory, knowledge, skills, and tools to use.
@@ -91,7 +93,7 @@ At the highest level, LocalMind is four cooperating layers. A message enters thr
 
 ## Low-Level Architecture (Plan → Execute → Respond)
 
-Every message is handled by three LLM stages in `engine/router.py`. **There is no intent classifier in the active path** — the model decides everything. (`engine/intent_classifier.py` is kept only as a legacy/optional component.)
+Every message is handled by three LLM stages in `engine/router.py`. **There is no intent classifier** — the model decides everything.
 
 ```
                  user message  +  SOUL.md persona  +  tool list
@@ -208,8 +210,7 @@ LocalMind/
 │
 ├── engine/
 │   ├── __init__.py
-│   ├── router.py                    # LLM-first Plan → Execute → Respond loop
-│   └── intent_classifier.py         # Legacy rule/LLM intent tagging (not in active path)
+│   └── router.py                    # LLM-first Plan → Execute → Respond loop
 │
 ├── skills/
 │   ├── __init__.py
@@ -425,7 +426,7 @@ Or send `/index` in Telegram to re-index memory files.
 python tests/test_all.py
 ```
 
-Covers: module imports, memory store, RAG retriever (skipped if optional deps missing), skill executor, the MCP coordinator (dynamic tool discovery + a filesystem tool call), and the legacy intent classifier.
+Covers: module imports, memory store, RAG retriever (skipped if optional deps missing), skill executor, and the MCP coordinator (dynamic tool discovery + a filesystem tool call). Runs under `pytest` (and directly via `python tests/test_all.py`).
 
 ---
 

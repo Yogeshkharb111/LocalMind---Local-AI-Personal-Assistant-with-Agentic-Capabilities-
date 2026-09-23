@@ -4,16 +4,17 @@ Standalone script to index documents into ChromaDB.
 Usage: python scripts/index_docs.py [--dir <path>] [--file <path>] [--clear]
 """
 
+import argparse
 import asyncio
 import sys
-import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rag.retriever import RAGRetriever
-from config.settings import settings
 from loguru import logger
+
+from config.settings import settings
+from rag.retriever import RAGRetriever
 
 
 async def main():
@@ -42,7 +43,7 @@ async def main():
 
     if args.stats:
         stats = await rag.get_stats()
-        print(f"\n📊 RAG Stats:")
+        print("\n📊 RAG Stats:")
         for k, v in stats.items():
             print(f"  {k}: {v}")
         return

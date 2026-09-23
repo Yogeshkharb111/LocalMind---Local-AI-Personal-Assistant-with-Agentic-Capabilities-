@@ -12,18 +12,34 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from loguru import logger
+
 from config.settings import settings
-from telegram_handler.handler import TelegramHandler
 from engine.router import Router
 from mcp.coordinator import MCPCoordinator
-from rag.retriever import RAGRetriever
 from memory_store.memory import MemoryStore
+from rag.retriever import RAGRetriever
 from skills.executor import SkillExecutor
+from telegram_handler.handler import TelegramHandler
 
 
 async def main():
     logger.info(f"🤖 Starting {settings.BOT_NAME} v{settings.BOT_VERSION}")
     logger.info("━" * 50)
+
+    # Fail fast if required configuration is missing.
+    errors = settings.validate()
+    if errors:
+        for err in errors:
+            logger.error(f"Config error: {err}")
+        logger.error("Fix your .env (copy from .env.example) and restart.")
+        sys.exit(1)
+
+    # Security warning: an empty whitelist means ANYONE can use the bot.
+    if not settings.TELEGRAM_ALLOWED_USERS:
+        logger.warning(
+            "TELEGRAM_ALLOWED_USERS is empty — the bot will accept messages from "
+            "ANYONE. Set it to your numeric Telegram user id(s) to lock it down."
+        )
 
     logger.info("📦 Initializing Memory Store...")
     memory = MemoryStore(settings.MEMORY_DIR)

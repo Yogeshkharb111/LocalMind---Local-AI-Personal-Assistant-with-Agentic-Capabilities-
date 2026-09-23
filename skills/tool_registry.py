@@ -55,8 +55,8 @@ class ToolRegistry:
             return "No fact provided."
 
         if tool_name == "memory_get_today_log":
-            from pathlib import Path
             from datetime import datetime
+            from pathlib import Path
             log_path = Path(self.daily_logs_dir) / f"{datetime.now().strftime('%Y-%m-%d')}.md"
             if log_path.exists():
                 return log_path.read_text(encoding="utf-8")[:3000]

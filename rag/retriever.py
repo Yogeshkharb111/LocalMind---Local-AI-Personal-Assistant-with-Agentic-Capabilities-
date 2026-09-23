@@ -10,7 +10,8 @@ Supports indexing:
 import hashlib
 import re
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import Any
+
 from loguru import logger
 
 
@@ -69,7 +70,7 @@ class RAGRetriever:
             logger.warning("sentence-transformers not installed. RAG embeddings disabled.")
 
     # ── Indexing ──────────────────────────────────────────
-    async def index_text(self, text: str, doc_id: str, metadata: Optional[Dict] = None) -> int:
+    async def index_text(self, text: str, doc_id: str, metadata: dict | None = None) -> int:
         """Split text into chunks and index them. Returns number of new chunks added."""
         if not self._collection or not self._embedder:
             return 0
@@ -152,7 +153,7 @@ class RAGRetriever:
         return total
 
     # ── Retrieval ─────────────────────────────────────────
-    async def retrieve(self, query: str) -> List[Dict[str, Any]]:
+    async def retrieve(self, query: str) -> list[dict[str, Any]]:
         """Retrieve top-k relevant chunks for a query."""
         if not self._collection or not self._embedder:
             return []
@@ -174,6 +175,7 @@ class RAGRetriever:
                 results["documents"][0],
                 results["metadatas"][0],
                 results["distances"][0],
+                strict=False,
             ):
                 # ChromaDB cosine distance → similarity score
                 score = 1 - dist
@@ -225,7 +227,7 @@ class RAGRetriever:
             logger.info("RAG knowledge base cleared")
 
     # ── Text Chunking ─────────────────────────────────────
-    def _chunk_text(self, text: str) -> List[str]:
+    def _chunk_text(self, text: str) -> list[str]:
         """Split text into overlapping chunks, respecting paragraph boundaries."""
         if not text.strip():
             return []

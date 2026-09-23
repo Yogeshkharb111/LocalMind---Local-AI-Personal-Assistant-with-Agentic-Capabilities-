@@ -4,7 +4,7 @@ LocalMind Settings — loads from .env file
 
 import os
 from pathlib import Path
-from typing import List, Optional
+
 from dotenv import load_dotenv
 
 # Load .env from project root
@@ -32,7 +32,7 @@ class Settings:
     OPENROUTER_REFERER: str = os.getenv("OPENROUTER_REFERER", "")
     OPENROUTER_TITLE:   str = os.getenv("OPENROUTER_TITLE", "")
 
-    def llm_headers(self, api_key: Optional[str] = None) -> dict:
+    def llm_headers(self, api_key: str | None = None) -> dict:
         """Build request headers for the LLM endpoint (OpenRouter/Ollama/OpenAI)."""
         headers = {
             "Authorization": f"Bearer {api_key or self.LLM_API_KEY}",
@@ -47,7 +47,7 @@ class Settings:
     # Telegram Bot
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     _allowed_raw: str = os.getenv("TELEGRAM_ALLOWED_USERS", "")
-    TELEGRAM_ALLOWED_USERS: List[int] = (
+    TELEGRAM_ALLOWED_USERS: list[int] = (
         [int(x.strip()) for x in _allowed_raw.split(",") if x.strip()]
         if _allowed_raw
         else []
@@ -95,8 +95,6 @@ class Settings:
     MEMORY_DIR: str = os.getenv("MEMORY_DIR", "./data/memory")
     MAX_CONVERSATION_HISTORY: int = int(os.getenv("MAX_CONVERSATION_HISTORY", "20"))
 
-    # Intent
-    INTENT_MODE: str = os.getenv("INTENT_MODE", "rule")  # 'rule' or 'llm'
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -106,7 +104,7 @@ class Settings:
     SKILLS_DIR: str = os.getenv("SKILLS_DIR", "./skills")
     DAILY_LOGS_DIR: str = os.getenv("DAILY_LOGS_DIR", "./data/daily_logs")
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """Return list of missing required settings."""
         errors = []
         if not self.TELEGRAM_BOT_TOKEN:

@@ -24,13 +24,23 @@ from pathlib import Path
 
 import httpx
 from loguru import logger
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from config.settings import settings
 from skills.tool_registry import ToolRegistry
 
+# Cap on how much of a single tool result is fed back to the LLM, to bound
+# context size and reduce the prompt-injection surface from large tool output.
+MAX_TOOL_RESULT_CHARS = 6000
+
 
 class Router:
-    def __init__(self, memory, rag, mcp_coordinator, skill_executor, intent_mode: str = "llm"):
+    def __init__(self, memory, rag, mcp_coordinator, skill_executor):
         self.memory = memory
         self.rag = rag
         self.mcp_coordinator = mcp_coordinator
@@ -39,6 +49,9 @@ class Router:
         self.llm_base_url = settings.LLM_BASE_URL
         self.llm_api_key  = settings.LLM_API_KEY
         self.llm_model    = settings.LLM_MODEL
+
+        # One shared HTTP client (connection pooling) instead of one per call.
+        self._http = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
 
         self.tool_registry = ToolRegistry(
             mcp_coordinator=mcp_coordinator,
@@ -49,6 +62,34 @@ class Router:
         )
 
         logger.info(f"Router initialized | LLM={self.llm_model} @ {self.llm_base_url} | mode=llm-first")
+
+    async def aclose(self):
+        """Close the shared HTTP client. Call on shutdown."""
+        await self._http.aclose()
+
+    # ── Shared LLM call (pooled client + retry with backoff) ───────────────────
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception_type(
+            (httpx.TransportError, httpx.TimeoutException)
+        ),
+    )
+    async def _chat(self, payload: dict, timeout: float = 120.0) -> dict:
+        """POST to the OpenAI-compatible /chat/completions endpoint.
+
+        Retries only on transient network/timeout errors (not on HTTP 4xx/5xx),
+        so a single blip does not fail the whole turn.
+        """
+        response = await self._http.post(
+            f"{self.llm_base_url}/chat/completions",
+            headers=settings.llm_headers(self.llm_api_key),
+            json=payload,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
 
     # ── Main Entry Point ──────────────────────────────────────────────────────
     async def process(self, user_id: int, user_name: str, message: str) -> str:
@@ -105,14 +146,11 @@ PLAN:
         ]
 
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                response = await client.post(
-                    f"{self.llm_base_url}/chat/completions",
-                    headers=settings.llm_headers(self.llm_api_key),
-                    json={"model": self.llm_model, "messages": messages, "max_tokens": 512, "temperature": 0.3},
-                )
-                response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"].strip()
+            data = await self._chat(
+                {"model": self.llm_model, "messages": messages, "max_tokens": 512, "temperature": 0.3},
+                timeout=60,
+            )
+            return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
             logger.warning(f"Planner failed: {e}")
             return "PLAN: Direct response using available tools as needed."
@@ -143,25 +181,18 @@ Rules:
         for iteration in range(15):
             logger.debug(f"Executor iteration {iteration + 1}/15")
             try:
-                async with httpx.AsyncClient(timeout=120) as client:
-                    response = await client.post(
-                        f"{self.llm_base_url}/chat/completions",
-                        headers=settings.llm_headers(self.llm_api_key),
-                        json={
-                            "model": self.llm_model,
-                            "messages": messages,
-                            "max_tokens": 2048,
-                            "temperature": 0.3,
-                            "tools": tools,
-                            "tool_choice": "auto",
-                        },
-                    )
-                    response.raise_for_status()
-                    data = response.json()
+                data = await self._chat({
+                    "model": self.llm_model,
+                    "messages": messages,
+                    "max_tokens": 2048,
+                    "temperature": 0.3,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                })
             except httpx.ConnectError:
-                return [{"tool": "error", "result": "Cannot connect to Ollama. Is it running?"}]
+                return [{"tool": "error", "result": "Cannot reach the LLM backend. Is OpenRouter/Ollama reachable?"}]
             except Exception as e:
-                logger.error(f"Executor LLM call failed: {e}")
+                logger.exception(f"Executor LLM call failed: {e}")
                 return execution_log
 
             choice = data["choices"][0]
@@ -184,8 +215,13 @@ Rules:
                     )
                     logger.debug(f"🔧 Result: {str(result)[:120]}")
 
-                    execution_log.append({"tool": tool_name, "args": tool_args, "result": str(result)})
-                    messages.append({"role": "tool", "tool_call_id": tool_call["id"], "content": str(result)})
+                    # Cap the result fed back into the model's context.
+                    result_str = str(result)
+                    if len(result_str) > MAX_TOOL_RESULT_CHARS:
+                        result_str = result_str[:MAX_TOOL_RESULT_CHARS] + "\n…(truncated)"
+
+                    execution_log.append({"tool": tool_name, "args": tool_args, "result": result_str})
+                    messages.append({"role": "tool", "tool_call_id": tool_call["id"], "content": result_str})
             else:
                 logger.debug(f"Executor complete after {iteration + 1} iteration(s)")
                 if assistant_msg.get("content"):
@@ -228,18 +264,14 @@ Rules:
         ]
 
         try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                response = await client.post(
-                    f"{self.llm_base_url}/chat/completions",
-                    headers=settings.llm_headers(self.llm_api_key),
-                    json={"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7},
-                )
-                response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"].strip()
+            data = await self._chat(
+                {"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7}
+            )
+            return data["choices"][0]["message"]["content"].strip()
         except httpx.ConnectError:
-            return "⚠️ Cannot connect to Ollama. Make sure it is running (ollama serve)."
+            return "⚠️ Cannot reach the LLM backend. Check LLM_BASE_URL (OpenRouter/Ollama)."
         except Exception as e:
-            logger.error(f"Responder failed: {e}")
+            logger.exception(f"Responder failed: {e}")
             if execution_results:
                 last = execution_results[-1]
                 return last["result"]
@@ -261,7 +293,7 @@ Rules:
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(entry)
 
-    # ── Legacy compatibility (used by skill handlers) ─────────────────────────
+    # ── Prompt-only helper (used by YAML prompt skills) ───────────────────────
     async def _build_context(self, user_id: int, include_rag=False, rag_context="", include_tools=False) -> dict:
         soul = await self.memory.get_soul()
         history = await self.memory.get_history(user_id, max_turns=settings.MAX_CONVERSATION_HISTORY)
@@ -273,59 +305,10 @@ Rules:
     async def _call_llm(self, system: str, history: list, message: str) -> str:
         messages = [{"role": "system", "content": system}] + history + [{"role": "user", "content": message}]
         try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                response = await client.post(
-                    f"{self.llm_base_url}/chat/completions",
-                    headers=settings.llm_headers(self.llm_api_key),
-                    json={"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7},
-                )
-                response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"]
+            data = await self._chat(
+                {"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7}
+            )
+            return data["choices"][0]["message"]["content"]
         except Exception as e:
-            logger.error(f"LLM call failed: {e}")
+            logger.exception(f"LLM call failed: {e}")
             return f"⚠️ LLM error: {str(e)}"
-
-    async def _call_llm_with_tools(self, system: str, history: list, message: str, tools: list) -> str:
-        messages = [{"role": "system", "content": system}] + history + [{"role": "user", "content": message}]
-        openai_tools = [
-            {"type": "function", "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}}
-            for t in tools
-        ]
-        all_text_parts = []
-        for _ in range(10):
-            try:
-                payload = {"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7}
-                if openai_tools:
-                    payload["tools"] = openai_tools
-                    payload["tool_choice"] = "auto"
-                async with httpx.AsyncClient(timeout=120) as client:
-                    response = await client.post(
-                        f"{self.llm_base_url}/chat/completions",
-                        headers=settings.llm_headers(self.llm_api_key),
-                        json=payload,
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-            except Exception as e:
-                return f"⚠️ Error: {str(e)}"
-            choice = data["choices"][0]
-            assistant_msg = choice["message"]
-            finish_reason = choice.get("finish_reason", "stop")
-            if assistant_msg.get("content"):
-                all_text_parts.append(assistant_msg["content"])
-            if finish_reason == "tool_calls" and assistant_msg.get("tool_calls"):
-                messages.append(assistant_msg)
-                for tool_call in assistant_msg["tool_calls"]:
-                    tool_name = tool_call["function"]["name"]
-                    try:
-                        tool_args = json.loads(tool_call["function"]["arguments"])
-                    except Exception:
-                        tool_args = {}
-                    result = await self.mcp_coordinator.execute_tool(tool_name, tool_args)
-                    messages.append({"role": "tool", "tool_call_id": tool_call["id"], "content": str(result)})
-            else:
-                break
-        return "\n\n".join(filter(None, all_text_parts)) or "⚠️ No response generated."
-
-    async def _send_intermediate(self, user_id: int, text: str):
-        logger.info(f"[intermediate → user {user_id}]: {text}")

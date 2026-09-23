@@ -10,7 +10,7 @@ Two types of skills supported:
 
 import importlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from loguru import logger
@@ -22,16 +22,16 @@ class Skill:
     def __init__(self, data: dict):
         self.name: str = data["name"]
         self.description: str = data.get("description", "")
-        self.triggers: List[str] = data.get("triggers", [])
+        self.triggers: list[str] = data.get("triggers", [])
         self.prompt_template: str = data.get("prompt_template", "")
-        self.tools: List[str] = data.get("tools", [])
+        self.tools: list[str] = data.get("tools", [])
         self.version: str = data.get("version", "1.0")
-        self.tags: List[str] = data.get("tags", [])
+        self.tags: list[str] = data.get("tags", [])
         # Python handler fields — set after init for handler-based skills
         self._is_python_handler: bool = False
-        self._handler_module: Optional[str] = None
+        self._handler_module: str | None = None
 
-    def build_prompt(self, message: str, context: Dict[str, Any] = None) -> str:
+    def build_prompt(self, message: str, context: dict[str, Any] = None) -> str:
         """Render the skill's prompt template."""
         ctx = {"message": message, **(context or {})}
         prompt = self.prompt_template
@@ -48,7 +48,7 @@ class SkillExecutor:
 
     def __init__(self, skills_dir: str):
         self.skills_dir = Path(skills_dir)
-        self.skills: Dict[str, Skill] = {}
+        self.skills: dict[str, Skill] = {}
         self.version = "2.0.0"
 
     async def initialize(self):
@@ -106,11 +106,11 @@ class SkillExecutor:
             except Exception as e:
                 logger.warning(f"Failed to load Python skill '{skill_dir.name}': {e}")
 
-    async def get_triggers(self) -> Dict[str, List[str]]:
-        """Return {skill_name: [trigger_patterns]} for the IntentClassifier."""
+    async def get_triggers(self) -> dict[str, list[str]]:
+        """Return {skill_name: [trigger_patterns]} (skill trigger metadata)."""
         return {name: skill.triggers for name, skill in self.skills.items()}
 
-    async def list_skills(self) -> List[dict]:
+    async def list_skills(self) -> list[dict]:
         """Return skill metadata list for display."""
         return [
             {
@@ -144,34 +144,16 @@ class SkillExecutor:
                 return f"⚠️ Skill '{skill_name}' encountered an error: {str(e)}"
 
         # ── YAML prompt-based skill ────────────────────────
+        # A YAML skill is a specialised prompt. It returns focused guidance;
+        # any actual tool calls happen in the main agentic loop, where every
+        # tool is available. (The skill's `tools:` field is advisory metadata.)
         prompt = skill.build_prompt(message=message)
-
-        if skill.tools:
-            context = await router._build_context(
-                user_id=user_id,
-                include_rag=True,
-                include_tools=True,
-            )
-            tools = await router.mcp_coordinator.get_tools()
-            if skill.tools:
-                tools = [t for t in tools if t["name"] in skill.tools]
-            return await router._call_llm_with_tools(
-                system=context["system"] + f"\n\nSkill Mode: {skill.name}\n{skill.description}",
-                history=context["history"],
-                message=prompt,
-                tools=tools,
-            )
-        else:
-            context = await router._build_context(
-                user_id=user_id,
-                include_rag=True,
-                include_tools=False,
-            )
-            return await router._call_llm(
-                system=context["system"] + f"\n\nSkill Mode: {skill.name}\n{skill.description}",
-                history=context["history"],
-                message=prompt,
-            )
+        context = await router._build_context(user_id=user_id, include_rag=True)
+        return await router._call_llm(
+            system=context["system"] + f"\n\nSkill Mode: {skill.name}\n{skill.description}",
+            history=context["history"],
+            message=prompt,
+        )
 
     async def _ensure_default_skills(self):
         """Create default skill YAML files if registry is empty."""

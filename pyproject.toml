@@ -1,0 +1,27 @@
+[project]
+name = "localmind"
+version = "2.1.0"
+description = "LocalMind — Local AI Personal Assistant with Agentic Capabilities"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Yogesh Kharb" }]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Runtime data and vendored/generated dirs are not linted.
+extend-exclude = ["data", "docs"]
+
+[tool.ruff.lint]
+# A pragmatic default: pyflakes (F), pycodestyle errors (E), warnings (W),
+# import order (I), bugbear (B), and pyupgrade (UP).
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # line length is handled by the formatter, not enforced hard
+    "B008",  # allow function calls in argument defaults (FastAPI-style patterns)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

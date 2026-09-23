@@ -3,18 +3,17 @@ LocalMind Telegram Handler
 Security gate → command routing → message dispatch
 """
 
-from typing import List, Optional
-from loguru import logger
 
-from telegram import Update, BotCommand
+from loguru import logger
+from telegram import BotCommand, Update
+from telegram.constants import ChatAction, ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
     ContextTypes,
+    MessageHandler,
     filters,
 )
-from telegram.constants import ParseMode, ChatAction
 
 
 class TelegramHandler:
@@ -25,11 +24,11 @@ class TelegramHandler:
     - Message dispatch: forwards messages to the Router engine
     """
 
-    def __init__(self, token: str, allowed_users: List[int], router):
+    def __init__(self, token: str, allowed_users: list[int], router):
         self.token = token
         self.allowed_users = allowed_users
         self.router = router
-        self.app: Optional[Application] = None
+        self.app: Application | None = None
 
     # ── Post-init hook ───────────────────────────────────
     async def _post_init(self, application: Application):
@@ -37,7 +36,7 @@ class TelegramHandler:
         # Initialize MCP inside run_polling's event loop
         import asyncio
         loop = asyncio.get_event_loop()
-        logger.info(f"Event loop type in _post_init: {type(loop).__name__}")        
+        logger.info(f"Event loop type in _post_init: {type(loop).__name__}")
         await self.router.mcp_coordinator.initialize()
 
         await application.bot.set_my_commands([
@@ -51,6 +50,18 @@ class TelegramHandler:
         ])
         logger.info("🤖 Telegram bot polling started")
 
+    async def _post_shutdown(self, application: Application):
+        """Called by run_polling on shutdown — release external resources."""
+        try:
+            await self.router.mcp_coordinator.shutdown()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"MCP shutdown error: {e}")
+        try:
+            await self.router.aclose()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Router HTTP client close error: {e}")
+        logger.info("👋 Shutdown complete")
+
     # ── Bootstrap ────────────────────────────────────────
     def run(self):
         """
@@ -63,6 +74,7 @@ class TelegramHandler:
             Application.builder()
             .token(self.token)
             .post_init(self._post_init)
+            .post_shutdown(self._post_shutdown)
             .build()
         )
 

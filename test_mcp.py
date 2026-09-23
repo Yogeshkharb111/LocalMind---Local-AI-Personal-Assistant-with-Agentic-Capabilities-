@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+
 async def test():
     proc = await asyncio.create_subprocess_exec(
         "node",
@@ -33,7 +34,7 @@ async def test():
     try:
         line = await asyncio.wait_for(proc.stdout.readline(), timeout=10.0)
         print(f"Got response: {line.decode()}")
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print("TIMEOUT - no response in 10 seconds")
         stderr = await proc.stderr.read(1000)
         print(f"Stderr: {stderr.decode()}")

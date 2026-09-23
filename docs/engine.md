@@ -1,6 +1,6 @@
 # engine/ — LLM-First Router
 
-The brain. Router runs the three-stage Plan -> Execute -> Respond loop for every message. The model plans, calls tools in a loop, then writes the final answer. intent_classifier.py is a legacy component and is not in the active path.
+The brain. Router runs the three-stage Plan -> Execute -> Respond loop for every message. The model plans, calls tools in a loop, then writes the final answer. There is no intent classifier — the LLM decides everything.
 
 ## Files
 
@@ -8,7 +8,7 @@ The brain. Router runs the three-stage Plan -> Execute -> Respond loop for every
 |------|----------------|
 | `__init__.py` | Marks the package. |
 | `router.py` | Router: _plan(), _execute() (agentic tool loop up to 15 iterations), _respond(); persists each turn. |
-| `intent_classifier.py` | Legacy rule/LLM intent tagging. Kept for reference; unused by the LLM-first router. |
+| `_chat()` | Shared pooled HTTP call to the LLM with retry/backoff (tenacity). |
 
 ## Flow
 
