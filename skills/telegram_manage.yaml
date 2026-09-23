@@ -1,0 +1,20 @@
+description: Manage Telegram chats, send messages, search history
+name: telegram_manage
+prompt_template: 'Help me with the following Telegram task. Use the Telegram tools
+  available to you.
+
+
+  Task: {{message}}'
+tags:
+- telegram
+- messaging
+tools:
+- telegram_get_messages
+- telegram_list_chats
+- telegram_search_messages
+- telegram_send_message
+triggers:
+- \b(check|search)\s+(telegram|tg)\b
+- \btelegram\s+(history|messages|chat)\b
+- \bscan\s+(this\s+)?channel\b
+version: '1.0'

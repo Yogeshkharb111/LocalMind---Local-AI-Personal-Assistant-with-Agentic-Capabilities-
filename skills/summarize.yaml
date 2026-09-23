@@ -1,0 +1,19 @@
+description: Summarize a conversation, document, or channel history
+name: summarize
+prompt_template: 'Please provide a clear, structured summary of the following. Organize
+  by key points and decisions made.
+
+
+  Content to summarize:
+
+  {{message}}'
+tags:
+- productivity
+- text
+tools: []
+triggers:
+- \bsummariz(e|ation)\b
+- \bsum\s+up\b
+- \btl;?dr\b
+- \bgive\s+me\s+(a\s+)?summary\b
+version: '1.0'

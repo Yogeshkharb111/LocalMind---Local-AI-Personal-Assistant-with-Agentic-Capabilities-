@@ -1,262 +1,304 @@
-# 🤖 YogiBot — Personal AI Assistant
+# 🤖 LocalMind — Local AI Personal Assistant with Agentic Capabilities
 
-A fully layered, self-hostable AI assistant accessible via **Telegram**, powered by **Claude (Anthropic)**, with deep tool integration via **MCP (Model Context Protocol)**.
+A fully self-hostable **local** AI personal assistant accessible via **Telegram**, powered by a **local LLM backend (Ollama)** through an OpenAI-compatible API, with deep tool integration via **MCP (Model Context Protocol)**. Because the model runs locally, your data never has to leave your machine.
 
-Inspired by MolBot / ClawBot, redesigned with a Layered Context Engine architecture.
+LocalMind is built around an **LLM-first, agentic architecture**. There are no hand-written routing rules deciding what to do — every message flows through a **Plan → Execute → Respond** loop, and the model itself decides which memory, knowledge, skills, and tools to use.
 
 ---
 
 ## Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Layer-by-Layer Design](#layer-by-layer-design)
-3. [MCP Servers](#mcp-servers)
-4. [Quick Start](#quick-start)
-5. [Configuration](#configuration)
-6. [Skills System](#skills-system)
-7. [Memory System](#memory-system)
-8. [RAG Knowledge Base](#rag-knowledge-base)
-9. [File Reference](#file-reference)
-10. [Running Tests](#running-tests)
-11. [Docker Deployment](#docker-deployment)
-12. [Troubleshooting](#troubleshooting)
+1. [Key Features](#key-features)
+2. [High-Level Architecture](#high-level-architecture)
+3. [Low-Level Architecture (Plan → Execute → Respond)](#low-level-architecture-plan--execute--respond)
+4. [Component Design](#component-design)
+5. [File Structure](#file-structure)
+6. [MCP Servers](#mcp-servers)
+7. [Quick Start](#quick-start)
+8. [Configuration](#configuration)
+9. [Skills System](#skills-system)
+10. [Memory System](#memory-system)
+11. [RAG Knowledge Base](#rag-knowledge-base)
+12. [Running Tests](#running-tests)
+13. [Docker Deployment](#docker-deployment)
+14. [Troubleshooting](#troubleshooting)
+15. [Security Notes](#security-notes)
 
 ---
 
-## Architecture Overview
+## Key Features
 
-YogiBot uses a **Layered Context Engine** — a deliberate pipeline that processes every message through four layers before the LLM sees it. This eliminates wasted compute on simple messages and ensures every complex request has the right context injected.
+- 🧠 **LLM-first agentic loop** — the model plans, calls tools in a loop, then writes a clean answer.
+- 🔒 **100% local LLM** — runs on Ollama; no cloud API keys needed for the brain.
+- 🔧 **MCP tool integration** — Telegram, GitHub, Filesystem, Windows, and LinkedIn, all discovered dynamically.
+- 📚 **RAG knowledge base** — semantic search over your notes and daily logs (ChromaDB + sentence-transformers).
+- 💾 **Layered memory** — persona, per-user facts, preferences, conversation history, and daily logs.
+- 🎯 **Skills** — reusable YAML prompt skills and Python handler skills (e.g. the meeting assistant).
+- 📱 **Telegram interface** — with a security whitelist and slash commands.
+
+---
+
+## High-Level Architecture
+
+At the highest level, LocalMind is four cooperating layers. A message enters through Telegram, the **Engine** drives the agentic loop, the **Capability layer** exposes everything the model can do as a single flat tool list, and the **Data layer** persists knowledge and memory.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                  TELEGRAM INTERFACE                      │
-│         telegram_handler/handler.py                      │
-│   Security gate → command routing → message dispatch     │
-└──────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│              CORE ASSISTANT ENGINE                       │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐    │
-│  │  1. Intent Classification Layer                  │    │
-│  │     engine/intent_classifier.py                  │    │
-│  │     Tags each message: CHAT / QUERY / ACTION / SKILL  │
-│  └──────────────────────────────────────────────────┘    │
-│                           │                              │
-│                           ▼                              │
-│  ┌──────────────────────────────────────────────────┐    │
-│  │  2. Request Router & Orchestrator                │    │
-│  │     engine/router.py                             │    │
-│  │     Assembles context window, calls LLM          │    │
-│  └──────────────────────────────────────────────────┘    │
-│                           │                              │
-│          ┌────────────────┼────────────────┐             │
-│          ▼                ▼                ▼             │
-│  ┌──────────────┐ ┌──────────────┐ ┌─────────────┐      │
-│  │  3a. Skill   │ │  3b. MCP     │ │  3c. RAG    │      │
-│  │  Executor    │ │  Coordinator │ │  Pipeline   │      │
-│  └──────────────┘ └──────────────┘ └─────────────┘      │
-└──────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│                     MCP LAYER                            │
-│  Telegram MCP │ GitHub MCP │ Windows MCP │ Filesystem MCP│
-│               │ LinkedIn MCP                             │
-└──────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│               KNOWLEDGE & DATA LAYER                     │
-│  ChromaDB (RAG) │ Skill Registry (.yaml) │ Memory Store  │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        USER (Telegram app)                         │
+└──────────────────────────────────────────────────────────────────┘
+                                  │  text message
+                                  ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  1. INTERFACE LAYER            telegram_handler/handler.py         │
+│     • Security gate (allowed-users whitelist)                       │
+│     • Slash commands: /start /help /memory /skills /clear /status   │
+│     • Dispatches plain messages to the Engine                      │
+└──────────────────────────────────────────────────────────────────┘
+                                  │  process(user, message)
+                                  ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  2. ENGINE LAYER               engine/router.py                    │
+│     LLM-first orchestrator — runs the agentic loop:                │
+│                                                                    │
+│        ┌──────────┐     ┌───────────┐     ┌────────────┐          │
+│        │  PLAN    │ ──► │  EXECUTE  │ ──► │  RESPOND   │          │
+│        └──────────┘     └───────────┘     └────────────┘          │
+│                              │  (tool calls)                        │
+└──────────────────────────────┼─────────────────────────────────────┘
+                                ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  3. CAPABILITY LAYER           skills/tool_registry.py             │
+│     One flat tool list handed to the LLM. The model picks tools.   │
+│                                                                    │
+│   ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌──────────────────┐  │
+│   │  Memory   │ │   RAG     │ │  Skills   │ │  MCP Coordinator │  │
+│   │  tools    │ │  search   │ │ executor  │ │  (mcp/…)         │  │
+│   └───────────┘ └───────────┘ └───────────┘ └──────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  4. DATA / EXTERNAL LAYER                                          │
+│   ChromaDB (vectors) │ Memory files (.md/.jsonl) │ Daily logs      │
+│   MCP servers: Telegram · GitHub · Filesystem · Windows · LinkedIn │
+│   Local LLM: Ollama (OpenAI-compatible /chat/completions)          │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Layer-by-Layer Design
+## Low-Level Architecture (Plan → Execute → Respond)
 
-### Layer 1: Intent Classifier (`engine/intent_classifier.py`)
+Every message is handled by three LLM stages in `engine/router.py`. **There is no intent classifier in the active path** — the model decides everything. (`engine/intent_classifier.py` is kept only as a legacy/optional component.)
 
-Every incoming message is tagged with one of four intents **before anything expensive runs**. This is the key optimization over v1 — simple messages like "thanks!" never touch RAG or tools.
-
-| Intent | Description | Examples |
-|--------|-------------|---------|
-| `CHAT` | Pure conversation, no tools | "good morning!", "thanks!", "lol" |
-| `QUERY` | Factual question → run RAG | "what did we decide last week?" |
-| `ACTION` | Requires MCP tool execution | "create a GitHub issue for bug X" |
-| `SKILL` | Named skill matched by trigger | "summarize this channel" |
-
-**Two modes** (set `INTENT_MODE` in `.env`):
-- `rule` (default) — regex patterns, fast, free, deterministic, ~0ms
-- `llm` — claude-haiku classification, ~200ms, costs tokens, more accurate
-
-### Layer 2: Request Router (`engine/router.py`)
-
-Takes the classified intent and:
-1. **Always** loads memory context (SOUL.md, USER.md, MEMORY.md, today's log)
-2. **Conditionally** triggers RAG (only for `QUERY`)
-3. **Conditionally** loads tools (only for `ACTION` and `SKILL`)
-4. Assembles the complete context window
-5. Calls the Anthropic API (with or without tools)
-6. Saves the turn to memory and daily log
-
-**Context window structure:**
 ```
-SYSTEM PROMPT
-  └── SOUL.md             (persona — always)
-  └── USER.md             (user prefs — always)
-  └── TOOLS.md            (env notes — always)
-  └── MEMORY.md           (curated facts — always)
-  └── Today's daily log   (recency — always)
-  └── Tool names          (only if ACTION or SKILL)
-─────────────────────────
-CONVERSATION HISTORY      (last 20 turns — always)
-─────────────────────────
-RAG CONTEXT               (only if QUERY intent)
-─────────────────────────
-USER MESSAGE              (always)
-```
-
-### Layer 3a: Skill Executor (`skills/executor.py`)
-
-Loads named skills from `skills/registry/*.yaml`. Each skill has:
-- `name` — unique identifier
-- `description` — shown in `/skills` command
-- `triggers` — regex patterns for the intent classifier
-- `prompt_template` — Jinja2-style template with `{{message}}`
-- `tools` — list of MCP tool names the skill needs
-
-**Default skills included:**
-- `summarize` — Summarize conversations/documents
-- `scan_bugs` — Code review and bug finding
-- `draft_message` — Professional message drafting
-- `github_workflow` — GitHub issue/PR management
-- `telegram_manage` — Telegram chat management
-- `file_manager` — Filesystem operations
-
-**Adding a custom skill:** create `skills/registry/my_skill.yaml`:
-```yaml
-name: my_skill
-description: Does my custom thing
-version: "1.0"
-tags: [custom]
-triggers:
-  - '\bmy\s+skill\b'
-  - '\bcustom\s+task\b'
-tools: []
-prompt_template: |
-  Perform this custom task:
-  {{message}}
+                 user message  +  SOUL.md persona  +  tool list
+                                     │
+        ══════════════════════════════════════════════════════════
+        STAGE 1 — PLAN                              _plan()
+        ──────────────────────────────────────────────────────────
+        • LLM reads the message and the names of all tools.
+        • Produces a short step-by-step plan (max ~5 steps).
+        • No tools are called yet. Temperature 0.3.
+        Output:  "PLAN: 1. … 2. …"
+        ══════════════════════════════════════════════════════════
+                                     │  plan
+                                     ▼
+        ══════════════════════════════════════════════════════════
+        STAGE 2 — EXECUTE                           _execute()
+        ──────────────────────────────────────────────────────────
+        Agentic tool loop (up to 15 iterations):
+                                                                    
+          ┌─────────────────────────────────────────────────┐     
+          │  call LLM with full tool schemas (tool_choice=   │     
+          │  auto)                                           │     
+          └─────────────────────────────────────────────────┘     
+                     │                         ▲                    
+          finish = "tool_calls"?               │ tool results       
+                     │ yes                      │ appended           
+                     ▼                         │                    
+          ┌─────────────────────────────────────────────────┐     
+          │  ToolRegistry.execute(name, args)               │     
+          │    • memory_*          → MemoryStore            │     
+          │    • knowledge_search  → RAGRetriever           │     
+          │    • skill_<name>      → SkillExecutor          │     
+          │    • <server>__<tool>  → MCPCoordinator         │     
+          └─────────────────────────────────────────────────┘     
+                     │ no more tool calls                           
+                     ▼                                              
+          collect execution_log  ─────────────────────────►        
+        ══════════════════════════════════════════════════════════
+                                     │  execution results
+                                     ▼
+        ══════════════════════════════════════════════════════════
+        STAGE 3 — RESPOND                           _respond()
+        ──────────────────────────────────────────────────────────
+        • LLM reflects on the plan + all tool results.
+        • Writes the final, natural-language reply. Temperature 0.7.
+        • Never leaks raw tool output or "stage" wording.
+        ══════════════════════════════════════════════════════════
+                                     │  final reply
+                                     ▼
+        save turn → MemoryStore (history_*.jsonl) + daily log
+                                     │
+                                     ▼
+                          Telegram reply to user
 ```
 
-### Layer 3b: MCP Coordinator (`mcp/coordinator.py`)
+**Why this design?** The model sees the whole toolbox and its own plan, so it can adapt mid-task (e.g. read memory, then search knowledge, then create a GitHub issue) without any brittle if/else routing. Failed tools are logged and the loop continues.
 
-Manages all MCP server connections and routes tool calls. Provides Anthropic-format tool definitions to the Router for the agentic tool-use loop.
+---
 
-Each MCP server is enabled only if its credentials are present in `.env`.
+## Component Design
 
-### Layer 3c: RAG Pipeline (`rag/retriever.py`)
+### Interface — `telegram_handler/handler.py`
+Owns the Telegram `Application` and its own event loop (`run_polling`). Enforces the `TELEGRAM_ALLOWED_USERS` whitelist, registers slash commands, initializes the MCP coordinator in `post_init`, and forwards plain text to `Router.process(...)`. Long replies are auto-split under Telegram's 4096-char limit.
 
-Uses **ChromaDB** (local vector database) and **sentence-transformers** for semantic search.
+### Engine — `engine/router.py`
+The `Router` runs the **Plan → Execute → Respond** loop described above. It talks to the local LLM over the OpenAI-compatible `/chat/completions` endpoint via `httpx`, builds the tool list from the `ToolRegistry`, executes tool calls, and persists each turn. (It also keeps a few legacy helper methods used by older skill handlers.)
 
-- Splits documents into overlapping chunks (512 chars, 64 overlap)
-- Embeds with `all-MiniLM-L6-v2` (lightweight, runs on CPU)
-- Retrieves top-5 most relevant chunks for QUERY intents
-- Automatically indexes all files in `data/memory/` and `data/daily_logs/`
+### Capability router — `skills/tool_registry.py`
+`ToolRegistry` merges **everything the model can do** into one flat OpenAI-format tool list:
+- **Memory tools:** `memory_get_history`, `memory_get_facts`, `memory_save_fact`, `memory_get_today_log`
+- **RAG tool:** `knowledge_search`
+- **Skill tools:** one `skill_<name>` per loaded skill
+- **MCP tools:** every dynamically discovered `<server>__<tool>`
+
+It also dispatches each tool call to the right subsystem.
+
+### MCP coordinator — `mcp/coordinator.py` + `mcp/client.py`
+Spawns each MCP server as a subprocess and speaks **JSON-RPC 2.0 over stdio**. Tools are discovered **dynamically** via `tools/list` — nothing is hardcoded — and namespaced as `<server>__<tool>` (e.g. `github__create_issue`). Server launch commands are cross-platform (`npx` resolved via `shutil.which`). Each server is enabled only when its credentials are present in `.env`.
+
+### Skills — `skills/executor.py`
+Loads two kinds of skills:
+1. **YAML prompt skills** — `skills/*.yaml` (a `name`, `description`, `tags`, optional `tools`, and a `prompt_template`).
+2. **Python handler skills** — a subdirectory with `skill.yaml` + `handler.py` exposing an async `run(...)` (e.g. `skills/meeting_assistant/`).
+
+### Memory — `memory_store/memory.py`
+Manages the layered memory files and in-memory + JSONL-persisted conversation history (see [Memory System](#memory-system)).
+
+### RAG — `rag/retriever.py`
+ChromaDB vector store + `sentence-transformers` embeddings (`all-MiniLM-L6-v2`), paragraph-aware chunking (512 chars / 64 overlap), cosine similarity with a configurable score threshold.
+
+### Config — `config/settings.py`
+Loads all settings from `.env`, applies sensible defaults, ensures data directories exist, and exposes a `validate()` check for required values.
+
+---
+
+## File Structure
+
+```
+LocalMind/
+├── main.py                          # Entry point — boots all subsystems, starts the bot
+├── requirements.txt                 # Python dependencies
+├── .env.example                     # Config template (copy to .env)
+├── Dockerfile                       # Container image
+├── docker-compose.yml               # Compose service + volumes + healthcheck
+├── test_mcp.py                      # Standalone MCP stdio smoke-test script
+│
+├── config/
+│   ├── __init__.py
+│   └── settings.py                  # Loads .env → Settings, creates data dirs
+│
+├── telegram_handler/
+│   ├── __init__.py
+│   └── handler.py                   # Telegram bot: security gate, commands, dispatch
+│
+├── engine/
+│   ├── __init__.py
+│   ├── router.py                    # LLM-first Plan → Execute → Respond loop
+│   └── intent_classifier.py         # Legacy rule/LLM intent tagging (not in active path)
+│
+├── skills/
+│   ├── __init__.py
+│   ├── tool_registry.py             # Flattens Memory + RAG + Skills + MCP into one tool list
+│   ├── executor.py                  # Loads & runs YAML and Python skills
+│   ├── summarize.yaml               # ┐
+│   ├── scan_bugs.yaml               # │ default YAML prompt skills
+│   ├── draft_message.yaml           # │
+│   ├── github_workflow.yaml         # │
+│   ├── telegram_manage.yaml         # │
+│   ├── file_manager.yaml            # ┘
+│   └── meeting_assistant/           # Python handler skill (record → transcribe → summarize)
+│       ├── skill.yaml
+│       ├── handler.py
+│       └── meeting/
+│           ├── recorder.py          # Mic capture (sounddevice)
+│           ├── transcriber.py       # Whisper speech-to-text
+│           ├── summarizer.py        # LLM summary + per-speaker notes
+│           └── scheduler.py         # APScheduler auto start/stop
+│
+├── memory_store/
+│   ├── __init__.py
+│   └── memory.py                    # SOUL/TOOLS/USER/MEMORY + history persistence
+│
+├── rag/
+│   ├── __init__.py
+│   └── retriever.py                 # ChromaDB indexing + semantic retrieval
+│
+├── mcp/
+│   ├── __init__.py
+│   ├── coordinator.py               # Spawns MCP servers, dynamic tool discovery + routing
+│   ├── client.py                    # JSON-RPC 2.0 stdio client (threaded reader)
+│   ├── SETUP.md                     # MCP server setup notes
+│   └── mcp_config_reference.json    # Reference config for external MCP clients
+│
+├── scripts/
+│   ├── gen_telegram_session.py      # One-time Telegram session-string generator
+│   └── index_docs.py                # Manual RAG indexer (--file/--dir/--stats/--clear)
+│
+├── tests/
+│   ├── __init__.py
+│   └── test_all.py                  # Component test suite
+│
+└── data/                            # Runtime data (gitignored where sensitive)
+    ├── memory/                      # SOUL.md, TOOLS.md, MEMORY_*.md, USER_*.md, history_*.jsonl
+    ├── chroma_db/                   # ChromaDB vector store (auto-created)
+    ├── daily_logs/                  # YYYY-MM-DD.md conversation logs
+    ├── meetings/                    # audio/ + transcripts/ from the meeting assistant
+    └── logs/                        # Application logs
+```
 
 ---
 
 ## MCP Servers
 
-YogiBot integrates 5 MCP servers. Each is enabled only when credentials are configured.
+LocalMind integrates 5 MCP servers. Each is enabled only when its credentials are configured. Tools are discovered dynamically at startup and exposed to the model as `<server>__<tool>` (for example `filesystem__read_file`, `github__create_issue`, `telegram__send_message`).
 
 ### 1. Telegram MCP
-**Source:** [chigwell/telegram-mcp](https://github.com/chigwell/telegram-mcp)  
-**What it does:** Lets the bot interact with your **personal Telegram account** (not just bot-to-user). Powered by Telethon.
-
-**Tools available:**
-- `telegram_send_message` — Send a message to any chat
-- `telegram_get_messages` — Read messages from a chat
-- `telegram_list_chats` — List all your chats
-- `telegram_search_messages` — Search messages in a chat
-- `telegram_create_group` — Create a new group
+**Source:** [chigwell/telegram-mcp](https://github.com/chigwell/telegram-mcp)
+**What it does:** Lets the bot act on your **personal Telegram account** (not just bot-to-user), via Telethon — messaging, chats, groups, contacts, media, and more (60+ tools).
 
 **Setup:**
 1. Get API credentials at [my.telegram.org/apps](https://my.telegram.org/apps)
-2. Generate session string: `python scripts/gen_telegram_session.py`
+2. Generate a session string: `python scripts/gen_telegram_session.py`
 3. Add to `.env`: `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_SESSION_STRING`
+4. (Recommended) Clone the server and set `TELEGRAM_MCP_DIR` to its path.
 
-> ⚠️ **Security:** The session string gives full access to your Telegram account. Never commit it to git.
-
----
+> ⚠️ **Security:** The session string grants full access to your Telegram account. Never commit it.
 
 ### 2. GitHub MCP
-**Source:** [github/github-mcp-server](https://github.com/github/github-mcp-server)  
-**What it does:** Full GitHub integration — create issues, PRs, search code, read files.
-
-**Tools available:**
-- `github_create_issue` — Create an issue in any repo
-- `github_list_issues` — List open/closed issues
-- `github_create_pull_request` — Open a PR
-- `github_search_code` — Search code across GitHub
-- `github_get_file` — Read a file from any repo
+**Source:** [github/github-mcp-server](https://github.com/github/github-mcp-server)
+**What it does:** Full GitHub integration — issues, PRs, code search, file reads, branches.
 
 **Setup:**
-1. Create a GitHub Personal Access Token at [github.com/settings/tokens](https://github.com/settings/tokens)
-2. Grant: `repo`, `issues`, `pull_requests`, `read:org`
-3. Add to `.env`: `GITHUB_TOKEN=ghp_xxx...`
+1. Create a Personal Access Token at [github.com/settings/tokens](https://github.com/settings/tokens) (scopes: `repo`, `issues`, `pull_requests`)
+2. Add to `.env`: `GITHUB_TOKEN=ghp_xxx...`
 
----
+### 3. Filesystem MCP
+**Source:** [modelcontextprotocol/servers/filesystem](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)
+**What it does:** Read, write, search, and manage local files within allowed roots.
+**Setup:** Always enabled. Requires Node.js (`npx` auto-installs the server on first run).
 
-### 3. Windows MCP
-**Source:** [CursorTouch/Windows-MCP](https://github.com/CursorTouch/Windows-MCP)  
-**What it does:** Computer use on Windows — take screenshots, click, type, open apps, run commands.
-
-**Tools available:**
-- `windows_screenshot` — Capture the screen
-- `windows_type_text` — Type via keyboard
-- `windows_click` — Click at coordinates
-- `windows_open_app` — Launch applications
-- `windows_run_command` — Run PowerShell/CMD commands
-
-**Setup:** Automatically enabled on Windows. Requires `pyautogui`:
-```bash
-pip install pyautogui
-```
-
-> ℹ️ This server is a no-op on macOS/Linux.
-
----
-
-### 4. Filesystem MCP
-**Source:** [modelcontextprotocol/servers/filesystem](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)  
-**What it does:** Read, write, search, and manage local files.
-
-**Tools available:**
-- `fs_read_file` — Read file contents
-- `fs_write_file` — Write/create a file
-- `fs_list_directory` — List directory contents
-- `fs_search_files` — Glob search for files
-- `fs_delete_file` — Delete a file
-
-**Setup:** Always enabled. No credentials needed.
-
----
+### 4. Windows MCP
+**Source:** [CursorTouch/Windows-MCP](https://github.com/CursorTouch/Windows-MCP)
+**What it does:** Computer use on Windows — screenshots, click, type, launch apps, run commands.
+**Setup:** Auto-enabled on Windows only (no-op on macOS/Linux).
 
 ### 5. LinkedIn MCP
-**Source:** [stickerdaniel/linkedin-mcp-server](https://github.com/stickerdaniel/linkedin-mcp-server)  
+**Source:** [stickerdaniel/linkedin-mcp-server](https://github.com/stickerdaniel/linkedin-mcp-server)
 **What it does:** LinkedIn profile lookup, job search, and posting.
-
-**Tools available:**
-- `linkedin_get_profile` — Get a profile's info
-- `linkedin_search_jobs` — Search job listings
-- `linkedin_create_post` — Post to LinkedIn
-
-**Setup:**
-1. Add to `.env`: `LINKEDIN_EMAIL` and `LINKEDIN_PASSWORD`
-2. Install: `pip install linkedin-mcp-server`
+**Setup:** Add `LINKEDIN_EMAIL` and `LINKEDIN_PASSWORD` to `.env`.
 
 ---
 
@@ -264,176 +306,118 @@ pip install pyautogui
 
 ### Prerequisites
 - Python 3.11+
+- Node.js (for the Filesystem/GitHub MCP servers via `npx`)
 - A Telegram account + Bot token (from [@BotFather](https://t.me/BotFather))
-- An Anthropic API key
+- [Ollama](https://ollama.com) running locally (`ollama serve`) with a model pulled, e.g. `ollama pull kimi-k2.5:cloud`
 
 ### 1. Clone and configure
-
 ```bash
 git clone <your-repo>
-cd yogibot
+cd LocalMind---Local-AI-Personal-Assistant-with-Agentic-Capabilities-
 cp .env.example .env
 # Edit .env with your credentials
 ```
 
 ### 2. Install dependencies
-
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure Telegram Bot
-
-1. Message [@BotFather](https://t.me/BotFather) on Telegram
-2. Send `/newbot` and follow prompts
-3. Copy the token to `.env` as `TELEGRAM_BOT_TOKEN`
+### 3. Configure the Telegram bot
+1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, follow the prompts.
+2. Copy the token into `.env` as `TELEGRAM_BOT_TOKEN`.
+3. (Recommended) Set `TELEGRAM_ALLOWED_USERS` to your numeric user ID.
 
 ### 4. Run
-
 ```bash
 python main.py
 ```
 
 ### 5. Chat with your bot
-
-Open Telegram and send a message to your bot. Try:
-- `/start` — welcome message
-- `/help` — show all commands
-- `/skills` — list available skills
-- `/status` — check MCP connections
-- "What did we discuss yesterday?" — QUERY
-- "Create a GitHub issue for bug X" — ACTION
-- "summarize this" — SKILL
-- "good morning!" — CHAT
+Open Telegram and message your bot. Try:
+- `/start`, `/help`, `/skills`, `/status`, `/memory`, `/clear`, `/index`
+- "What did we discuss yesterday?"
+- "Create a GitHub issue for bug X"
+- "summarize this: …"
+- "start meeting recording" / "summarize last meeting"
 
 ---
 
 ## Configuration
 
-All configuration is in `.env`. Key settings:
+All configuration lives in `.env`. Key settings:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic API key | required |
-| `ANTHROPIC_MODEL` | Main Claude model | `claude-sonnet-4-20250514` |
-| `ANTHROPIC_HAIKU_MODEL` | Fast model for intent | `claude-haiku-4-5-20251001` |
+| `LLM_BASE_URL` | OpenAI-compatible LLM endpoint (Ollama) | `http://localhost:11434/v1` |
+| `LLM_API_KEY` | API key for the endpoint (Ollama ignores it) | `ollama` |
+| `LLM_MODEL` | Model name to use | `kimi-k2.5:cloud` |
 | `TELEGRAM_BOT_TOKEN` | Bot token from BotFather | required |
 | `TELEGRAM_ALLOWED_USERS` | Comma-separated user IDs (empty = allow all) | |
-| `INTENT_MODE` | `rule` or `llm` | `rule` |
+| `GITHUB_TOKEN` | GitHub PAT (enables GitHub MCP) | |
+| `TELEGRAM_MCP_DIR` | Path to a cloned telegram-mcp repo | |
 | `RAG_TOP_K` | Max RAG results per query | `5` |
-| `RAG_MIN_SCORE` | Minimum similarity score (0-1) | `0.3` |
-| `MAX_CONVERSATION_HISTORY` | Turns to include in context | `20` |
-| `EMBEDDING_MODEL` | Sentence transformer model | `all-MiniLM-L6-v2` |
+| `RAG_MIN_SCORE` | Minimum similarity score (0–1) | `0.3` |
+| `MAX_CONVERSATION_HISTORY` | Turns included in context | `20` |
+| `EMBEDDING_MODEL` | Sentence-transformer model | `all-MiniLM-L6-v2` |
+| `BOT_NAME` | Display name | `LocalMind` |
+
+See `.env.example` for the full annotated list.
+
+---
+
+## Skills System
+
+Skills are reusable capabilities the model can invoke as `skill_<name>` tools.
+
+**YAML prompt skills** (`skills/*.yaml`):
+```yaml
+name: my_skill
+description: Does my custom thing
+version: "1.0"
+tags: [custom]
+triggers:
+  - '\bmy\s+skill\b'
+tools: []          # optional MCP tool names to restrict to
+prompt_template: |
+  Perform this custom task:
+  {{message}}
+```
+
+**Python handler skills** — a folder with `skill.yaml` + `handler.py` exposing `async def run(message, user_id, router)`. The bundled `meeting_assistant` records the mic, transcribes with Whisper, and produces an LLM summary with per-speaker notes.
+
+**Default skills:** `summarize`, `scan_bugs`, `draft_message`, `github_workflow`, `telegram_manage`, `file_manager`, `meeting_assistant`.
 
 ---
 
 ## Memory System
 
-YogiBot has four memory layers:
-
 | File | Scope | Description |
 |------|-------|-------------|
 | `SOUL.md` | Global | Bot persona — who it is, how it behaves |
-| `TOOLS.md` | Global | Environment notes — what tools are available |
+| `TOOLS.md` | Global | Environment notes about available tools |
 | `USER_{id}.md` | Per-user | User preferences and context |
 | `MEMORY_{id}.md` | Per-user | Curated facts the bot has learned |
 | `history_{id}.jsonl` | Per-user | Full conversation history |
 | `daily_logs/YYYY-MM-DD.md` | Global | All interactions logged by day |
 
-**Customizing SOUL.md:** Edit `data/memory/SOUL.md` to change the bot's persona.
-
-**Adding memory facts via bot:**
-The bot automatically saves important information. You can also directly edit `data/memory/MEMORY_{your_user_id}.md`.
+Edit `data/memory/SOUL.md` to change the persona. The model can also save facts itself via the `memory_save_fact` tool.
 
 ---
 
 ## RAG Knowledge Base
 
-The RAG system lets YogiBot search through all your documents semantically.
+Semantic search over your documents (ChromaDB + sentence-transformers).
 
-**What gets auto-indexed:**
-- All files in `data/memory/`
-- Last 30 days of daily logs
+**Auto-indexed:** everything in `data/memory/` and the last 30 days of `data/daily_logs/`.
 
-**Indexing custom documents:**
 ```bash
-# Index a single file
-python scripts/index_docs.py --file /path/to/doc.md
-
-# Index a whole directory
-python scripts/index_docs.py --dir /path/to/docs/
-
-# Check stats
-python scripts/index_docs.py --stats
-
-# Clear and re-index everything
-python scripts/index_docs.py --clear --dir data/memory/
+python scripts/index_docs.py --file /path/to/doc.md   # index one file
+python scripts/index_docs.py --dir /path/to/docs/     # index a directory
+python scripts/index_docs.py --stats                  # show chunk count
+python scripts/index_docs.py --clear --dir data/memory/  # rebuild
 ```
-
-**Via Telegram:**
-Send `/index` to re-index all memory files.
-
----
-
-## File Reference
-
-```
-yogibot/
-├── main.py                          # Entry point
-├── requirements.txt                 # Python dependencies
-├── .env.example                     # Config template
-├── Dockerfile                       # Docker build
-├── docker-compose.yml               # Docker Compose
-│
-├── config/
-│   ├── __init__.py
-│   └── settings.py                  # Settings loader (from .env)
-│
-├── telegram_handler/
-│   ├── __init__.py
-│   └── handler.py                   # Telegram bot handler, security gate, commands
-│
-├── engine/
-│   ├── __init__.py
-│   ├── intent_classifier.py         # Layer 1: message intent tagging
-│   └── router.py                    # Layer 2: context assembly + LLM orchestration
-│
-├── memory_store/
-│   ├── __init__.py
-│   └── memory.py                    # SOUL/USER/MEMORY/history management
-│
-├── rag/
-│   ├── __init__.py
-│   └── retriever.py                 # ChromaDB indexing + semantic search
-│
-├── mcp/
-│   ├── __init__.py
-│   ├── coordinator.py               # MCP server management + tool routing
-│   └── mcp_config_reference.json   # Config reference for external MCP clients
-│
-├── skills/
-│   ├── __init__.py
-│   ├── executor.py                  # Skill loading + execution
-│   └── registry/                   # Skill YAML definitions
-│       ├── summarize.yaml
-│       ├── scan_bugs.yaml
-│       ├── draft_message.yaml
-│       ├── github_workflow.yaml
-│       ├── telegram_manage.yaml
-│       └── file_manager.yaml
-│
-├── data/
-│   ├── memory/                      # SOUL.md, MEMORY_*.md, USER_*.md, history_*.jsonl
-│   ├── chroma_db/                   # ChromaDB vector store (auto-created)
-│   ├── daily_logs/                  # YYYY-MM-DD.md conversation logs
-│   └── logs/                        # Application logs
-│
-├── scripts/
-│   └── index_docs.py                # Manual RAG indexer
-│
-└── tests/
-    └── test_all.py                  # Test suite
-```
+Or send `/index` in Telegram to re-index memory files.
 
 ---
 
@@ -443,63 +427,47 @@ yogibot/
 python tests/test_all.py
 ```
 
-Tests cover:
-1. **Architecture** — all modules import correctly
-2. **Intent Classifier** — 10 test cases, rule-based and LLM mode
-3. **Memory Store** — SOUL, prefs, facts, history, persistence
-4. **RAG Retriever** — indexing, semantic search, chunking
-5. **Skill Executor** — YAML loading, trigger matching, prompt rendering
-6. **MCP Coordinator** — server status, tool listing, filesystem execution
+Covers: module imports, memory store, RAG retriever (skipped if optional deps missing), skill executor, the MCP coordinator (dynamic tool discovery + a filesystem tool call), and the legacy intent classifier.
 
 ---
 
 ## Docker Deployment
 
 ```bash
-# Build and run
-docker compose up --build -d
-
-# View logs
-docker compose logs -f
-
-# Stop
-docker compose down
+docker compose up --build -d   # build and run
+docker compose logs -f         # view logs
+docker compose down            # stop
 ```
-
-Data is persisted in `./data/` via volume mount.
+Data is persisted via the `./data` volume mount. Note: Ollama must be reachable from the container — point `LLM_BASE_URL` at your host (e.g. `http://host.docker.internal:11434/v1`).
 
 ---
 
 ## Troubleshooting
 
-**Bot not responding:**
-- Check `TELEGRAM_BOT_TOKEN` is correct
-- Check `ANTHROPIC_API_KEY` is valid
-- Check `data/logs/yogibot.log` for errors
+**Bot not responding**
+- Verify `TELEGRAM_BOT_TOKEN` is correct and your ID is in `TELEGRAM_ALLOWED_USERS`.
+- Check `data/logs/localmind.log`.
 
-**MCP server not connecting:**
-- Run `/status` in Telegram to see which servers are enabled
-- Make sure all credentials for that server are in `.env`
-- Telegram MCP: regenerate session string if you see auth errors
+**"Cannot connect to Ollama"**
+- Make sure `ollama serve` is running and the model in `LLM_MODEL` is pulled.
+- Confirm `LLM_BASE_URL` (default `http://localhost:11434/v1`).
 
-**RAG not returning results:**
-- Run `python scripts/index_docs.py --stats` to check chunk count
-- If 0 chunks: run `python scripts/index_docs.py --dir data/memory/`
-- Lower `RAG_MIN_SCORE` in `.env` (try `0.1`)
+**MCP server not connecting**
+- Run `/status` in Telegram to see which servers are enabled.
+- Ensure that server's credentials are in `.env`, and that Node.js/`npx` (Filesystem, GitHub) or `uv`/`uvx` (Telegram, Windows, LinkedIn) is installed.
 
-**Intent misclassification:**
-- Switch to `INTENT_MODE=llm` for better accuracy
-- Or add custom patterns to `engine/intent_classifier.py`
+**RAG returns nothing**
+- `python scripts/index_docs.py --stats` to check the chunk count.
+- If 0: `python scripts/index_docs.py --dir data/memory/`; try lowering `RAG_MIN_SCORE`.
 
-**Out of context / wrong memory:**
-- Run `/clear` to reset conversation history
-- Check `data/memory/MEMORY_{your_id}.md` for stale facts
+**Wrong / stale memory**
+- Send `/clear` to reset conversation history, or edit `data/memory/MEMORY_{your_id}.md`.
 
 ---
 
 ## Security Notes
 
-- Never commit `.env` to git — it's in `.gitignore`
-- The Telegram session string gives full access to your account
-- Set `TELEGRAM_ALLOWED_USERS` to restrict bot access to your user ID only
-- Find your Telegram user ID: message [@userinfobot](https://t.me/userinfobot)
+- Never commit `.env` — it's in `.gitignore`.
+- The Telegram session string grants full account access; keep it secret.
+- Set `TELEGRAM_ALLOWED_USERS` to your own user ID to lock the bot down.
+- Find your Telegram user ID via [@userinfobot](https://t.me/userinfobot).

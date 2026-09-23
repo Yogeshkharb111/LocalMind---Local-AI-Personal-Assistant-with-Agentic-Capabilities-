@@ -1,0 +1,20 @@
+description: Read, write, search, and manage files on the filesystem
+name: file_manager
+prompt_template: 'Help me with the following file management task. Use filesystem
+  tools to complete it.
+
+
+  Task: {{message}}'
+tags:
+- filesystem
+- files
+tools:
+- fs_read_file
+- fs_write_file
+- fs_list_directory
+- fs_search_files
+triggers:
+- \b(organize|manage)\s+files?\b
+- \bfile\s+(manager|management)\b
+- \bfind\s+all\s+files?\b
+version: '1.0'

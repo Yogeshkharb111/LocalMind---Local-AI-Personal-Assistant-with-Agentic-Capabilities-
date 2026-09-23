@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-YogiBot — Main Entry Point
-Layered Context Engine AI Assistant via Telegram
+LocalMind — Main Entry Point
+LLM-First Architecture: Plan → Execute → Respond
+No intent classifier. LLM decides everything.
 """
 
 import asyncio
 import sys
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from loguru import logger
@@ -22,7 +22,6 @@ from skills.executor import SkillExecutor
 
 
 async def main():
-    """Bootstrap all systems except MCP, return handler."""
     logger.info(f"🤖 Starting {settings.BOT_NAME} v{settings.BOT_VERSION}")
     logger.info("━" * 50)
 
@@ -39,21 +38,19 @@ async def main():
     )
     await rag.initialize()
 
-    logger.info("🔧 Creating MCP Coordinator (will connect after Telegram starts)...")
+    logger.info("🔧 Creating MCP Coordinator...")
     mcp_coord = MCPCoordinator()
-    # ← NOT calling mcp_coord.initialize() here
 
     logger.info("🎯 Initializing Skill Executor...")
     skill_exec = SkillExecutor(settings.SKILLS_DIR)
     await skill_exec.initialize()
 
-    logger.info("🚦 Initializing Router & Engine...")
+    logger.info("🚦 Initializing Router (LLM-First: Plan → Execute → Respond)...")
     router = Router(
         memory=memory,
         rag=rag,
         mcp_coordinator=mcp_coord,
         skill_executor=skill_exec,
-        intent_mode=settings.INTENT_MODE,
     )
 
     logger.info("📱 Initializing Telegram Handler...")
@@ -63,15 +60,15 @@ async def main():
         router=router,
     )
 
-    logger.info("📚 Checking RAG index...")
+    logger.info("📚 Indexing memory files into RAG...")
     await rag.index_memory_files(settings.MEMORY_DIR)
 
-    logger.info(f"✅ {settings.BOT_NAME} ready!")
+    logger.info(f"✅ {settings.BOT_NAME} ready! (LLM-First mode)")
     logger.info("━" * 50)
 
-    return handler  # ← return, don't run
+    return handler
 
 
 if __name__ == "__main__":
-    handler = asyncio.run(main())  # async init in ProactorEventLoop
-    handler.run()                  # run_polling owns its own fresh loop
+    handler = asyncio.run(main())
+    handler.run()

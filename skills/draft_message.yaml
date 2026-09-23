@@ -1,0 +1,16 @@
+description: Draft a professional message, email, or post
+name: draft_message
+prompt_template: 'Draft a professional message based on the following request. Match
+  the appropriate tone and format.
+
+
+  Request: {{message}}'
+tags:
+- writing
+- communication
+tools: []
+triggers:
+- \bdraft\s+(a\s+)?(message|email|post|response|reply)\b
+- \bwrite\s+(a\s+)?(professional|formal|casual)\b
+- \bhelp\s+me\s+(write|compose|craft)\b
+version: '1.0'

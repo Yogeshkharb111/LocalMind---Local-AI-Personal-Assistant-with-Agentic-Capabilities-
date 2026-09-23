@@ -1,0 +1,20 @@
+description: 'Assist with GitHub operations: create issues, PRs, review code'
+name: github_workflow
+prompt_template: 'Help me with the following GitHub task. Use the available GitHub
+  tools to complete it.
+
+
+  Task: {{message}}'
+tags:
+- github
+- development
+tools:
+- github_create_issue
+- github_list_issues
+- github_create_pull_request
+- github_search_code
+- github_get_file
+triggers:
+- \b(create|open|file)\s+(a\s+)?github\s+(issue|ticket|bug\s+report)\b
+- \bgithub\s+(workflow|task|action)\b
+version: '1.0'

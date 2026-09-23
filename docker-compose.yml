@@ -1,9 +1,9 @@
 version: "3.9"
 
 services:
-  yogibot:
+  localmind:
     build: .
-    container_name: yogibot
+    container_name: localmind
     restart: unless-stopped
     env_file:
       - .env
@@ -13,7 +13,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
-      test: ["CMD", "python", "-c", "import anthropic; print('ok')"]
+      # Verify the app's core deps import cleanly (LocalMind uses a local
+      # Ollama backend via httpx — there is no anthropic dependency).
+      test: ["CMD", "python", "-c", "import httpx, telegram, yaml; print('ok')"]
       interval: 30s
       timeout: 10s
       retries: 3

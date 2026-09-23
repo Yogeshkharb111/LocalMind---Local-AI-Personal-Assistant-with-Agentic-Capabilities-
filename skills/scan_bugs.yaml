@@ -1,0 +1,19 @@
+description: Scan code or a description for bugs, issues, and improvement suggestions
+name: scan_bugs
+prompt_template: 'Analyze the following code or description for bugs, potential issues,
+  performance problems, and improvement suggestions. Be specific and actionable.
+
+
+  {{message}}'
+tags:
+- code
+- review
+tools:
+- fs_read_file
+- github_get_file
+triggers:
+- \bscan\s+(for\s+)?bugs?\b
+- \b(find|look\s+for)\s+(bugs?|issues?|errors?)\b
+- \bcode\s+review\b
+- \bdebu[g]?\b
+version: '1.0'
