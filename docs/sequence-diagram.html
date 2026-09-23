@@ -81,15 +81,29 @@
       <pre class="mermaid">
 sequenceDiagram
     autonumber
-    actor U as User (Telegram)
-    participant H as TelegramHandler
-    participant R as Router (Plan/Execute/Respond)
-    participant M as MemoryStore
-    participant TR as ToolRegistry
-    participant L as LLM (Ollama)
-    participant MC as MCPCoordinator
-    participant RAG as RAGRetriever
-    participant SK as SkillExecutor
+    box rgb(59,91,219) User Layer
+        actor U as User (Telegram)
+    end
+    box rgb(38,50,120) Interface Component
+        participant H as TelegramHandler
+    end
+    box rgb(45,60,140) Engine Component
+        participant R as Router (Plan/Execute/Respond)
+    end
+    box rgb(52,70,160) Capability Component
+        participant TR as ToolRegistry
+        participant SK as SkillExecutor
+    end
+    box rgb(40,80,90) Data &amp; Memory Component
+        participant M as MemoryStore
+        participant RAG as RAGRetriever
+    end
+    box rgb(90,60,120) External / MCP Component
+        participant MC as MCPCoordinator
+    end
+    box rgb(120,80,40) LLM Backend
+        participant L as LLM (Ollama)
+    end
 
     U->>H: send text message
     activate H
@@ -124,10 +138,10 @@ sequenceDiagram
             else knowledge_search
                 TR->>RAG: retrieve(query)
                 RAG-->>TR: top-k chunks
-            else skill_<name>
+            else skill_[name]
                 TR->>SK: execute(skill, message)
                 SK-->>TR: skill output
-            else <server>__<tool> (MCP)
+            else server__tool (MCP)
                 TR->>MC: execute_tool(name, args)
                 MC-->>TR: JSON-RPC result
             end
@@ -151,7 +165,7 @@ sequenceDiagram
     R-->>H: final reply text
     deactivate R
 
-    H->>U: reply (auto-split if > 4000 chars)
+    H->>U: reply (auto-split if over 4000 chars)
     deactivate H
       </pre>
     </div>
