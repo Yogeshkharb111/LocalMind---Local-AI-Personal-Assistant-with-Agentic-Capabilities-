@@ -2,7 +2,7 @@
 LocalMind Tool Registry
 Combines ALL tools into one flat list for the LLM:
   - Memory tools  (STM history, LTM facts, RAG search, daily log)
-  - Skill tools   (meeting_assistant, summarize, scan_bugs, etc.)
+  - Skill tools   (summarize, scan_bugs, draft_message, etc.)
   - MCP tools     (Telegram, GitHub, Filesystem, Windows, LinkedIn)
 
 LLM sees everything — it decides what to call and when.

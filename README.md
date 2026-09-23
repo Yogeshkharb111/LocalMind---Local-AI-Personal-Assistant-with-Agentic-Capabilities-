@@ -4,7 +4,7 @@ A fully self-hostable AI personal assistant accessible via **Telegram**, powered
 
 LocalMind is built around an **LLM-first, agentic architecture**. There are no hand-written routing rules deciding what to do — every message flows through a **Plan → Execute → Respond** loop, and the model itself decides which memory, knowledge, skills, and tools to use.
 
-> 📊 **Interactive diagrams:** open [`docs/architecture.html`](docs/architecture.html) in a browser for the architecture overview and full sequence diagrams (bootstrap, MCP startup, message processing, meeting assistant, shutdown).
+> 📊 **Interactive diagrams:** open [`docs/architecture.html`](docs/architecture.html) in a browser for the architecture overview and full sequence diagrams (bootstrap, MCP startup, message processing, shutdown).
 
 ---
 
@@ -31,11 +31,11 @@ LocalMind is built around an **LLM-first, agentic architecture**. There are no h
 ## Key Features
 
 - 🧠 **LLM-first agentic loop** — the model plans, calls tools in a loop, then writes a clean answer.
-- 🔒 **100% local LLM** — runs on Ollama; no cloud API keys needed for the brain.
+- 🔒 **Pluggable LLM backend** — OpenRouter (cloud) or a fully local Ollama; any OpenAI-compatible endpoint.
 - 🔧 **MCP tool integration** — Telegram, GitHub, Filesystem, Windows, and LinkedIn, all discovered dynamically.
 - 📚 **RAG knowledge base** — semantic search over your notes and daily logs (ChromaDB + sentence-transformers).
 - 💾 **Layered memory** — persona, per-user facts, preferences, conversation history, and daily logs.
-- 🎯 **Skills** — reusable YAML prompt skills and Python handler skills (e.g. the meeting assistant).
+- 🎯 **Skills** — reusable YAML prompt skills, plus optional Python handler skills.
 - 📱 **Telegram interface** — with a security whitelist and slash commands.
 
 ---
@@ -174,7 +174,7 @@ Spawns each MCP server as a subprocess and speaks **JSON-RPC 2.0 over stdio**. T
 ### Skills — `skills/executor.py`
 Loads two kinds of skills:
 1. **YAML prompt skills** — `skills/*.yaml` (a `name`, `description`, `tags`, optional `tools`, and a `prompt_template`).
-2. **Python handler skills** — a subdirectory with `skill.yaml` + `handler.py` exposing an async `run(...)` (e.g. `skills/meeting_assistant/`).
+2. **Python handler skills** — a subdirectory with `skill.yaml` + `handler.py` exposing an async `run(...)`.
 
 ### Memory — `memory_store/memory.py`
 Manages the layered memory files and in-memory + JSONL-persisted conversation history (see [Memory System](#memory-system)).
@@ -220,15 +220,7 @@ LocalMind/
 │   ├── draft_message.yaml           # │
 │   ├── github_workflow.yaml         # │
 │   ├── telegram_manage.yaml         # │
-│   ├── file_manager.yaml            # ┘
-│   └── meeting_assistant/           # Python handler skill (record → transcribe → summarize)
-│       ├── skill.yaml
-│       ├── handler.py
-│       └── meeting/
-│           ├── recorder.py          # Mic capture (sounddevice)
-│           ├── transcriber.py       # Whisper speech-to-text
-│           ├── summarizer.py        # LLM summary + per-speaker notes
-│           └── scheduler.py         # APScheduler auto start/stop
+│   └── file_manager.yaml            # ┘
 │
 ├── memory_store/
 │   ├── __init__.py
@@ -260,7 +252,6 @@ LocalMind/
     ├── memory/                      # SOUL.md, TOOLS.md, MEMORY_*.md, USER_*.md, history_*.jsonl
     ├── chroma_db/                   # ChromaDB vector store (auto-created)
     ├── daily_logs/                  # YYYY-MM-DD.md conversation logs
-    ├── meetings/                    # audio/ + transcripts/ from the meeting assistant
     └── logs/                        # Application logs
 ```
 
@@ -346,7 +337,6 @@ Open Telegram and message your bot. Try:
 - "What did we discuss yesterday?"
 - "Create a GitHub issue for bug X"
 - "summarize this: …"
-- "start meeting recording" / "summarize last meeting"
 
 ---
 
@@ -392,9 +382,9 @@ prompt_template: |
   {{message}}
 ```
 
-**Python handler skills** — a folder with `skill.yaml` + `handler.py` exposing `async def run(message, user_id, router)`. The bundled `meeting_assistant` records the mic, transcribes with Whisper, and produces an LLM summary with per-speaker notes.
+**Python handler skills** — a folder with `skill.yaml` + `handler.py` exposing `async def run(message, user_id, router)`. Drop a new folder in `skills/` and it is auto-discovered.
 
-**Default skills:** `summarize`, `scan_bugs`, `draft_message`, `github_workflow`, `telegram_manage`, `file_manager`, `meeting_assistant`.
+**Default skills:** `summarize`, `scan_bugs`, `draft_message`, `github_workflow`, `telegram_manage`, `file_manager`.
 
 ---
 

@@ -5,7 +5,7 @@ Loads named skills from YAML definitions and executes them.
 Two types of skills supported:
   1. YAML skills — defined in skills/*.yaml with prompt templates
   2. Python handler skills — subdirectories with skill.yaml + handler.py
-     (e.g. skills/meeting_assistant/skill.yaml + handler.py)
+     (e.g. a subdirectory with skill.yaml + handler.py)
 """
 
 import importlib

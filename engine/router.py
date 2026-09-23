@@ -92,8 +92,6 @@ Rules:
 - Decide upfront: do you need memory? history? knowledge search? which tools?
 - If this is simple conversation needing no tools, say: "PLAN: Direct response, no tools needed."
 - Be specific about the order of steps. Max 5 steps.
-- For meeting requests: always use skill_meeting_assistant tool.
-- For summarizing last meeting: use skill_meeting_assistant with message "summarize last meeting".
 
 Output format:
 PLAN:
@@ -133,7 +131,6 @@ Rules:
 - Call tools in the planned order
 - If a tool fails, note it and continue
 - Do NOT write the final response yet — just execute and collect results
-- For meeting_assistant, pass the full user instruction as the message argument
 """
 
         messages = [
@@ -219,7 +216,6 @@ Rules:
 - Be natural, clear, and helpful
 - Synthesize tool output into clean readable response
 - Don't mention "the plan" or "execution stages" — just respond naturally
-- If it's meeting summary output, format it nicely with sections
 - Match tone to the user's message
 """
 
