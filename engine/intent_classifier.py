@@ -179,10 +179,7 @@ class IntentClassifier:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
                     f"{settings.LLM_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {settings.LLM_API_KEY}",
-                        "Content-Type": "application/json",
-                    },
+                    headers=settings.llm_headers(),
                     json={
                         "model": settings.LLM_MODEL,
                         "messages": [{"role": "user", "content": prompt}],

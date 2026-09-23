@@ -226,10 +226,7 @@ class MeetingSummarizer:
             async with httpx.AsyncClient(timeout=120) as client:
                 response = await client.post(
                     f"{self.llm_base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.llm_api_key}",
-                        "Content-Type": "application/json",
-                    },
+                    headers=settings.llm_headers(self.llm_api_key),
                     json={
                         "model": self.llm_model,
                         "messages": [{"role": "user", "content": prompt}],

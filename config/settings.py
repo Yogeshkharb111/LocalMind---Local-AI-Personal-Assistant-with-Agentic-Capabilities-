@@ -12,13 +12,37 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 class Settings:
-    # ── LLM Backend — Ollama (local, no API key needed) ───
-    # Ollama runs at localhost:11434 by default
-    # Model shown in your Ollama UI: kimi-k2.5:cloud
-    # Change LLM_MODEL in .env to switch models anytime
+    # ── LLM Backend — any OpenAI-compatible /chat/completions endpoint ───
+    # Works with either:
+    #   • OpenRouter (cloud, many models):
+    #       LLM_BASE_URL=https://openrouter.ai/api/v1
+    #       LLM_API_KEY=sk-or-...            (your OpenRouter key)
+    #       LLM_MODEL=openrouter/auto        (or any OpenRouter model id)
+    #   • Ollama (local, no key needed):
+    #       LLM_BASE_URL=http://localhost:11434/v1
+    #       LLM_API_KEY=ollama
+    #       LLM_MODEL=kimi-k2.5:cloud
+    # Defaults below target a local Ollama; override in .env for OpenRouter.
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
     LLM_API_KEY:  str = os.getenv("LLM_API_KEY",  "ollama")   # dummy key — Ollama doesn't need one
     LLM_MODEL:    str = os.getenv("LLM_MODEL",    "kimi-k2.5:cloud")
+
+    # Optional OpenRouter attribution headers (recommended by OpenRouter,
+    # ignored by other backends). Safe to leave blank.
+    OPENROUTER_REFERER: str = os.getenv("OPENROUTER_REFERER", "")
+    OPENROUTER_TITLE:   str = os.getenv("OPENROUTER_TITLE", "")
+
+    def llm_headers(self, api_key: Optional[str] = None) -> dict:
+        """Build request headers for the LLM endpoint (OpenRouter/Ollama/OpenAI)."""
+        headers = {
+            "Authorization": f"Bearer {api_key or self.LLM_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        if self.OPENROUTER_REFERER:
+            headers["HTTP-Referer"] = self.OPENROUTER_REFERER
+        if self.OPENROUTER_TITLE:
+            headers["X-Title"] = self.OPENROUTER_TITLE
+        return headers
 
     # Telegram Bot
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")

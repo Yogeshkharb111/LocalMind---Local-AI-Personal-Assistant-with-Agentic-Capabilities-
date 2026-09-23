@@ -1,8 +1,10 @@
 # 🤖 LocalMind — Local AI Personal Assistant with Agentic Capabilities
 
-A fully self-hostable **local** AI personal assistant accessible via **Telegram**, powered by a **local LLM backend (Ollama)** through an OpenAI-compatible API, with deep tool integration via **MCP (Model Context Protocol)**. Because the model runs locally, your data never has to leave your machine.
+A fully self-hostable AI personal assistant accessible via **Telegram**, powered by any **OpenAI-compatible LLM backend** — use **OpenRouter** (cloud, many models) or a **local Ollama** server — with deep tool integration via **MCP (Model Context Protocol)**. Run it fully local so your data never leaves your machine, or point it at OpenRouter for access to frontier models.
 
 LocalMind is built around an **LLM-first, agentic architecture**. There are no hand-written routing rules deciding what to do — every message flows through a **Plan → Execute → Respond** loop, and the model itself decides which memory, knowledge, skills, and tools to use.
+
+> 📊 **Interactive diagrams:** open [`docs/architecture.html`](docs/architecture.html) in a browser for the architecture overview and full sequence diagrams (bootstrap, MCP startup, message processing, meeting assistant, shutdown).
 
 ---
 
@@ -243,6 +245,9 @@ LocalMind/
 │   ├── SETUP.md                     # MCP server setup notes
 │   └── mcp_config_reference.json    # Reference config for external MCP clients
 │
+├── docs/
+│   └── architecture.html            # Interactive architecture + sequence diagrams
+│
 ├── scripts/
 │   ├── gen_telegram_session.py      # One-time Telegram session-string generator
 │   └── index_docs.py                # Manual RAG indexer (--file/--dir/--stats/--clear)
@@ -308,7 +313,9 @@ LocalMind integrates 5 MCP servers. Each is enabled only when its credentials ar
 - Python 3.11+
 - Node.js (for the Filesystem/GitHub MCP servers via `npx`)
 - A Telegram account + Bot token (from [@BotFather](https://t.me/BotFather))
-- [Ollama](https://ollama.com) running locally (`ollama serve`) with a model pulled, e.g. `ollama pull kimi-k2.5:cloud`
+- An LLM backend — **either**:
+  - **OpenRouter** — a key from [openrouter.ai/keys](https://openrouter.ai/keys), **or**
+  - **Ollama** running locally (`ollama serve`) with a model pulled, e.g. `ollama pull kimi-k2.5:cloud`
 
 ### 1. Clone and configure
 ```bash
@@ -349,9 +356,10 @@ All configuration lives in `.env`. Key settings:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LLM_BASE_URL` | OpenAI-compatible LLM endpoint (Ollama) | `http://localhost:11434/v1` |
-| `LLM_API_KEY` | API key for the endpoint (Ollama ignores it) | `ollama` |
-| `LLM_MODEL` | Model name to use | `kimi-k2.5:cloud` |
+| `LLM_BASE_URL` | OpenAI-compatible endpoint. OpenRouter: `https://openrouter.ai/api/v1` | `http://localhost:11434/v1` |
+| `LLM_API_KEY` | API key. OpenRouter: `sk-or-...`; Ollama ignores it | `ollama` |
+| `LLM_MODEL` | Model id. OpenRouter e.g. `openrouter/auto`; Ollama e.g. `kimi-k2.5:cloud` | `kimi-k2.5:cloud` |
+| `OPENROUTER_REFERER` / `OPENROUTER_TITLE` | Optional OpenRouter attribution headers | |
 | `TELEGRAM_BOT_TOKEN` | Bot token from BotFather | required |
 | `TELEGRAM_ALLOWED_USERS` | Comma-separated user IDs (empty = allow all) | |
 | `GITHUB_TOKEN` | GitHub PAT (enables GitHub MCP) | |

@@ -110,7 +110,7 @@ PLAN:
             async with httpx.AsyncClient(timeout=60) as client:
                 response = await client.post(
                     f"{self.llm_base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.llm_api_key}", "Content-Type": "application/json"},
+                    headers=settings.llm_headers(self.llm_api_key),
                     json={"model": self.llm_model, "messages": messages, "max_tokens": 512, "temperature": 0.3},
                 )
                 response.raise_for_status()
@@ -149,7 +149,7 @@ Rules:
                 async with httpx.AsyncClient(timeout=120) as client:
                     response = await client.post(
                         f"{self.llm_base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self.llm_api_key}", "Content-Type": "application/json"},
+                        headers=settings.llm_headers(self.llm_api_key),
                         json={
                             "model": self.llm_model,
                             "messages": messages,
@@ -235,7 +235,7 @@ Rules:
             async with httpx.AsyncClient(timeout=120) as client:
                 response = await client.post(
                     f"{self.llm_base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.llm_api_key}", "Content-Type": "application/json"},
+                    headers=settings.llm_headers(self.llm_api_key),
                     json={"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7},
                 )
                 response.raise_for_status()
@@ -280,7 +280,7 @@ Rules:
             async with httpx.AsyncClient(timeout=120) as client:
                 response = await client.post(
                     f"{self.llm_base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.llm_api_key}", "Content-Type": "application/json"},
+                    headers=settings.llm_headers(self.llm_api_key),
                     json={"model": self.llm_model, "messages": messages, "max_tokens": 2048, "temperature": 0.7},
                 )
                 response.raise_for_status()
@@ -305,7 +305,7 @@ Rules:
                 async with httpx.AsyncClient(timeout=120) as client:
                     response = await client.post(
                         f"{self.llm_base_url}/chat/completions",
-                        headers={"Authorization": f"Bearer {self.llm_api_key}", "Content-Type": "application/json"},
+                        headers=settings.llm_headers(self.llm_api_key),
                         json=payload,
                     )
                     response.raise_for_status()
